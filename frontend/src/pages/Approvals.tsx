@@ -24,16 +24,21 @@ import {
 import { clsx } from 'clsx';
 import { accountApi, outreachApi, targetingApi } from '@/lib/api';
 import type { Suggestion, SuggestionAction } from '@/types';
+import { Card, Chip, Button, EmptyState } from '@/components/ui';
 
+// Action badges used to be four different ad-hoc colours (purple, sky,
+// amber, slate). Collapsed to the two that actually matter for scanning:
+// "this posts something" (accent) vs. passive engagement (neutral) — the
+// tokens forced the question of which distinctions were worth keeping.
 const ACTION_META: Record<
   SuggestionAction,
-  { label: string; icon: typeof UserPlus; tone: string }
+  { label: string; icon: typeof UserPlus; tone: 'accent' | 'neutral' }
 > = {
-  connect: { label: 'Connection request', icon: UserPlus, tone: 'bg-purple-500/15 text-purple-300' },
-  message: { label: 'Direct message', icon: MessageSquare, tone: 'bg-sky-500/15 text-sky-300' },
-  comment: { label: 'Comment on their post', icon: MessageSquare, tone: 'bg-amber-500/15 text-amber-300' },
-  like: { label: 'Like their post', icon: Sparkles, tone: 'bg-slate-500/15 text-slate-300' },
-  follow: { label: 'Follow', icon: UserPlus, tone: 'bg-slate-500/15 text-slate-300' },
+  connect: { label: 'Connection request', icon: UserPlus, tone: 'accent' },
+  message: { label: 'Direct message', icon: MessageSquare, tone: 'accent' },
+  comment: { label: 'Comment on their post', icon: MessageSquare, tone: 'accent' },
+  like: { label: 'Like their post', icon: Sparkles, tone: 'neutral' },
+  follow: { label: 'Follow', icon: UserPlus, tone: 'neutral' },
 };
 
 export function Approvals() {
@@ -88,6 +93,7 @@ export function Approvals() {
   if (!accounts.length) {
     return (
       <EmptyState
+        icon={<Send size={40} />}
         title="Connect an account first"
         body="The approval queue shows outreach proposed on behalf of a connected LinkedIn account. Add one to get started."
         cta={{ label: 'Go to Accounts', href: '/accounts' }}
@@ -180,6 +186,7 @@ export function Approvals() {
         </div>
       ) : suggestions.length === 0 ? (
         <EmptyState
+          icon={<Send size={40} />}
           title="Nothing waiting for review"
           body="Import some people on the Targeting page, then use “Suggest who to contact”. Only strong matches make it this far."
         />
@@ -236,18 +243,18 @@ function SuggestionCard({
   const overLimit = suggestion.action === 'connect' && text.length > 300;
 
   return (
-    <motion.article
+    <motion.div
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.98 }}
-      className="rounded-xl bg-slate-800/60 border border-slate-700 overflow-hidden"
     >
+      <Card padded={false} className="overflow-hidden">
       {/* Who */}
       <div className="p-5 pb-3 flex items-start gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-slate-100 font-semibold truncate">
+            <h3 className="text-foreground font-semibold truncate">
               {target?.full_name ?? 'Unknown person'}
             </h3>
             {target?.profile_url && (
@@ -255,19 +262,18 @@ function SuggestionCard({
                 href={target.profile_url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-slate-400 hover:text-slate-200"
+                className="text-muted hover:text-foreground"
                 title="Open LinkedIn profile"
               >
                 <ExternalLink size={14} />
               </a>
             )}
-            <span className={clsx('px-2 py-0.5 rounded-full text-xs font-medium', meta.tone)}>
-              <Icon size={11} className="inline mr-1 -mt-px" />
+            <Chip tone={meta.tone} icon={<Icon size={11} />}>
               {meta.label}
-            </span>
+            </Chip>
           </div>
           {target?.headline && (
-            <p className="text-sm text-slate-400 mt-0.5 truncate">{target.headline}</p>
+            <p className="text-sm text-muted mt-0.5 truncate">{target.headline}</p>
           )}
         </div>
 
@@ -278,12 +284,9 @@ function SuggestionCard({
       {suggestion.relevance_reasons.length > 0 && (
         <div className="px-5 pb-3 flex flex-wrap gap-1.5">
           {suggestion.relevance_reasons.map((reason) => (
-            <span
-              key={reason}
-              className="px-2 py-0.5 rounded bg-slate-700/60 text-slate-300 text-xs"
-            >
+            <Chip key={reason} tone="neutral">
               {reason}
-            </span>
+            </Chip>
           ))}
         </div>
       )}
@@ -296,12 +299,12 @@ function SuggestionCard({
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={4}
-              className="w-full rounded-lg bg-slate-900 border border-slate-600 text-slate-100 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full rounded-lg bg-slate-900 border border-slate-600 text-slate-100 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
             <div
               className={clsx(
                 'text-xs mt-1',
-                overLimit ? 'text-red-400' : 'text-slate-500',
+                overLimit ? 'text-danger' : 'text-muted',
               )}
             >
               {text.length}
@@ -309,13 +312,13 @@ function SuggestionCard({
             </div>
           </div>
         ) : (
-          <blockquote className="rounded-lg bg-slate-900/70 border-l-2 border-purple-500 p-3 text-sm text-slate-200 whitespace-pre-wrap">
-            {text || <span className="text-slate-500">No draft</span>}
+          <blockquote className="rounded-lg bg-slate-900/70 border-l-2 border-accent p-3 text-sm text-slate-200 whitespace-pre-wrap">
+            {text || <span className="text-muted">No draft</span>}
           </blockquote>
         )}
 
         {/* Honesty: how the copy was made and what's weak about it */}
-        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted">
           {suggestion.generated_by && <span>Written by {suggestion.generated_by}</span>}
           {typeof suggestion.quality_score === 'number' && (
             <span>Quality {suggestion.quality_score}/100</span>
@@ -323,71 +326,64 @@ function SuggestionCard({
         </div>
 
         {suggestion.quality_warnings.length > 0 && (
-          <ul className="mt-2 space-y-1">
+          <div className="mt-2 flex flex-col gap-1.5">
             {suggestion.quality_warnings.map((warning) => (
-              <li key={warning} className="flex items-start gap-1.5 text-xs text-amber-400/90">
-                <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-                <span>{warning}</span>
-              </li>
+              <Chip key={warning} tone="accent" icon={<AlertTriangle size={11} />} className="justify-start w-fit">
+                {warning}
+              </Chip>
             ))}
-          </ul>
+          </div>
         )}
       </div>
 
       {/* Decide */}
-      <div className="px-5 py-3 bg-slate-900/40 border-t border-slate-700 flex flex-wrap items-center gap-2">
-        <button
+      <div className="px-5 py-3 bg-slate-900/40 border-t border-border flex flex-wrap items-center gap-2">
+        <Button
+          variant="success"
           onClick={() => approve.mutate()}
           disabled={busy || overLimit || !text.trim()}
-          className="btn-approve"
+          icon={approve.isPending ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
         >
-          {approve.isPending ? (
-            <Loader2 size={15} className="animate-spin" />
-          ) : (
-            <Check size={15} />
-          )}
           Approve{editing ? ' edit' : ''} &amp; schedule
-        </button>
+        </Button>
 
-        <button
-          onClick={() => setEditing((v) => !v)}
-          disabled={busy}
-          className="btn-ghost"
-        >
-          <Pencil size={15} />
+        <Button variant="ghost" onClick={() => setEditing((v) => !v)} disabled={busy} icon={<Pencil size={15} />}>
           {editing ? 'Cancel edit' : 'Edit'}
-        </button>
+        </Button>
 
-        <button onClick={() => reject.mutate(false)} disabled={busy} className="btn-ghost">
-          <X size={15} />
+        <Button variant="ghost" onClick={() => reject.mutate(false)} disabled={busy} icon={<X size={15} />}>
           Skip
-        </button>
+        </Button>
 
-        <button
+        {/* Still fires on one click — the confirm step is scoped for the
+            Week 2 review-queue rebuild, not this token/component pass. */}
+        <Button
+          variant="danger"
           onClick={() => reject.mutate(true)}
           disabled={busy}
-          className="btn-ghost text-red-400 hover:bg-red-500/10 ml-auto"
+          icon={<Ban size={15} />}
+          className="ml-auto"
           title="Never contact this person again"
         >
-          <Ban size={15} />
           Never contact
-        </button>
+        </Button>
       </div>
-    </motion.article>
+      </Card>
+    </motion.div>
   );
 }
 
 function RelevanceBadge({ score }: { score: number }) {
   const tone =
     score >= 85
-      ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10'
+      ? 'text-success border-success/40 bg-success/10'
       : score >= 70
-        ? 'text-amber-300 border-amber-500/40 bg-amber-500/10'
-        : 'text-slate-300 border-slate-500/40 bg-slate-500/10';
+        ? 'text-accent border-accent/40 bg-accent/10'
+        : 'text-muted border-border bg-surface';
   return (
-    <div className={clsx('shrink-0 text-center rounded-lg border px-3 py-1.5', tone)}>
-      <div className="text-lg font-semibold leading-none">{score}</div>
-      <div className="text-[10px] uppercase tracking-wide opacity-70 mt-0.5">match</div>
+    <div className={clsx('shrink-0 text-center rounded-md border px-3 py-1.5', tone)}>
+      <div className="text-base font-semibold leading-none">{score}</div>
+      <div className="text-xs uppercase tracking-wide opacity-70 mt-0.5">match</div>
     </div>
   );
 }
@@ -415,8 +411,8 @@ function Notice({
       className={clsx(
         'mb-4 rounded-lg border px-4 py-3 text-sm flex items-start gap-3',
         tone === 'error'
-          ? 'bg-red-500/10 border-red-500/40 text-red-200'
-          : 'bg-slate-700/40 border-slate-600 text-slate-300',
+          ? 'bg-danger/10 border-danger/40 text-danger'
+          : 'bg-surface/60 border-border text-muted',
       )}
     >
       <span className="flex-1">{children}</span>
@@ -427,25 +423,5 @@ function Notice({
   );
 }
 
-function EmptyState({
-  title,
-  body,
-  cta,
-}: {
-  title: string;
-  body: string;
-  cta?: { label: string; href: string };
-}) {
-  return (
-    <div className="max-w-2xl mx-auto px-4 py-20 text-center">
-      <Send className="mx-auto text-slate-600 mb-4" size={40} />
-      <h2 className="text-xl font-semibold text-slate-200">{title}</h2>
-      <p className="text-slate-400 mt-2">{body}</p>
-      {cta && (
-        <a href={cta.href} className="btn-primary inline-flex mt-5">
-          {cta.label}
-        </a>
-      )}
-    </div>
-  );
-}
+// EmptyState now lives in @/components/ui — shared across every screen
+// that can be empty, not just this one.
