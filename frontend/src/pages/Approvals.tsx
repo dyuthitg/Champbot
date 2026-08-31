@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Ban,
   Check,
+  Copy,
   ExternalLink,
   Loader2,
   MessageSquare,
@@ -325,6 +326,17 @@ function SuggestionCard({
             <span>Quality {suggestion.quality_score}/100</span>
           )}
         </div>
+
+        {/* The thing a one-at-a-time review could never show on its own:
+            this draft reads like others already sitting in the same
+            queue. Computed across the whole batch server-side (see
+            src/outreach/similarity.py) every time the queue loads. */}
+        {suggestion.similar_to && suggestion.similar_to.length > 0 && (
+          <Chip tone="danger" icon={<Copy size={11} />} className="justify-start w-fit mt-2">
+            Near-identical to {suggestion.similar_to.length === 1 ? '1 other queued comment' : `${suggestion.similar_to.length} other queued comments`}
+            {' '}({suggestion.similar_to.join(', ')})
+          </Chip>
+        )}
 
         {suggestion.quality_warnings.length > 0 && (
           <div className="mt-2 flex flex-col gap-1.5">

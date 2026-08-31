@@ -313,6 +313,10 @@ export interface Suggestion {
   error?: string;
   created_at?: string;
   target?: TargetSummary;
+  /** Names of other pending suggestions this draft reads like — see
+   * src/outreach/similarity.py. Empty when nothing queued is close enough
+   * to flag. */
+  similar_to?: string[];
 }
 
 export interface GenerateResult {

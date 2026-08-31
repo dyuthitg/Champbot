@@ -54,6 +54,10 @@ class SuggestionResponse(BaseModel):
     error: Optional[str] = None
     created_at: Optional[datetime] = None
     target: Optional[TargetSummary] = None
+    # Names of other pending suggestions (same action) this draft reads like
+    # -- see src/outreach/similarity.py. Empty when nothing else queued is
+    # close enough to flag.
+    similar_to: List[str] = Field(default_factory=list)
 
 
 class SuggestionListResponse(BaseModel):

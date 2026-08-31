@@ -30,6 +30,7 @@ from src.api.middleware.clerk import RequestContext, get_request_context
 from src.database.session import get_db
 from src.outreach import execute as executor
 from src.outreach import health as health_module
+from src.outreach import similarity
 from src.outreach import suggest as engine
 from src.outreach import sync as sync_module
 from src.outreach.models import OutreachSuggestion, SuggestionAction, SuggestionStatus
@@ -180,9 +181,20 @@ async def list_suggestions(
     ).limit(limit)
 
     rows = list((await db.execute(stmt)).scalars().all())
+    serialized = [await _serialize(db, r) for r in rows]
+
+    # Flag repetition across the batch -- the thing a one-at-a-time review
+    # can never show on its own. Only meaningful among items still awaiting
+    # a decision; a queue of "all" statuses would flag a sent message
+    # against a rejected one, which tells the reviewer nothing useful.
+    if suggestion_status == SuggestionStatus.PENDING:
+        similar = similarity.find_similar(serialized)
+        for s in serialized:
+            s.similar_to = similar.get(s.id, [])
+
     return SuggestionListResponse(
-        suggestions=[await _serialize(db, r) for r in rows],
-        total=len(rows),
+        suggestions=serialized,
+        total=len(serialized),
     )
 
 
