@@ -218,6 +218,7 @@ function SuggestionCard({
   onError: (message: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [confirmingReject, setConfirmingReject] = useState(false);
   const [text, setText] = useState(suggestion.final_text ?? suggestion.draft_text ?? '');
   const meta = ACTION_META[suggestion.action] ?? ACTION_META.connect;
   const Icon = meta.icon;
@@ -355,18 +356,44 @@ function SuggestionCard({
           Skip
         </Button>
 
-        {/* Still fires on one click — the confirm step is scoped for the
-            Week 2 review-queue rebuild, not this token/component pass. */}
-        <Button
-          variant="danger"
-          onClick={() => reject.mutate(true)}
-          disabled={busy}
-          icon={<Ban size={15} />}
-          className="ml-auto"
-          title="Never contact this person again"
-        >
-          Never contact
-        </Button>
+        {/* Permanent action, two taps: click asks, a second click commits.
+            Set apart by distance, weight, and now a real confirm step —
+            not colour alone. */}
+        {confirmingReject ? (
+          <div className="ml-auto flex items-center gap-2 rounded-md border border-danger/60 bg-danger/10 px-3 py-1.5">
+            <span className="text-sm text-foreground">
+              Never contact {target?.full_name ?? 'this person'}?
+            </span>
+            <Button
+              variant="danger"
+              onClick={() => reject.mutate(true)}
+              disabled={busy}
+              icon={reject.isPending ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
+              className="px-3 py-1.5"
+            >
+              Confirm
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmingReject(false)}
+              disabled={busy}
+              className="px-3 py-1.5"
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="danger"
+            onClick={() => setConfirmingReject(true)}
+            disabled={busy}
+            icon={<Ban size={15} />}
+            className="ml-auto"
+            title="Never contact this person again"
+          >
+            Never contact
+          </Button>
+        )}
       </div>
       </Card>
     </motion.div>
