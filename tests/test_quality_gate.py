@@ -173,6 +173,37 @@ def test_referencing_their_post_counts_as_personalization():
     assert "their_post" in report.stats["personalization_signals"]
 
 
+def test_sharing_only_generic_topic_words_does_not_count_as_personalization():
+    """Regression test for the Aug 21 2026 audit finding: the post-text check
+    used to credit ANY shared 6+ letter word, so a templated comment on a
+    generic-topic post scored a false 'their_post' signal. This is the actual
+    worst-scoring comment from that audit (score 5/100) against its real
+    source post -- the only words it shared with the post were "activation",
+    "product", and "marketing", all now stoplisted the same way a generic
+    headline word already was.
+    """
+    target = person(
+        first_name="Amaya",
+        full_name="Amaya Reyes",
+        company=None,
+        title=None,
+        headline=None,
+        context={
+            "post_text": "Activation is a team sport — product, marketing "
+            "and sales all own a piece.",
+        },
+    )
+    report = check_copy(
+        "You nailed it with the team aspect of activation. I've seen how "
+        "alignment between product and marketing can significantly boost "
+        "retention. What strategies have you found effective in fostering "
+        "that collaboration at Trackr?",
+        "comment",
+        target,
+    )
+    assert "their_post" not in report.stats["personalization_signals"]
+
+
 def test_allowed_acronyms_are_not_treated_as_shouting():
     report = check_copy(
         "Hi Dana — your SaaS growth work at Northwind, especially the B2B "

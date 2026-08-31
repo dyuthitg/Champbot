@@ -119,6 +119,15 @@ _GENERIC_HEADLINE_WORDS = {
     "platform", "consultant", "consulting", "specialist", "professional",
     "experience", "helping", "building", "passionate", "driving", "focused",
     "operations", "engineering", "development", "management", "partner",
+    # Added 2026-09-02: the topic vocabulary of a whole vertical (SaaS growth
+    # posts, here) is just as generic as a job title once a bot is writing at
+    # scale — "activation" showing up in both a post and a reply proves the
+    # post was about activation, not that the profile was actually read.
+    # Found via the Aug 21 audit's worst-scoring comment, which shared only
+    # "activation"/"product"/"marketing" with its source post and still
+    # scored a false personalization signal without this.
+    "activation", "retention", "onboarding", "strategies", "collaboration",
+    "engagement", "conversion", "adoption", "alignment",
 }
 
 
@@ -326,12 +335,19 @@ def _personalization_signals(lowered: str, target: Any) -> List[str]:
             signals.append("headline")
             break
 
-    # A reference to something they actually posted is the strongest signal.
+    # A reference to something they actually posted is the strongest signal —
+    # but only if the shared word is actually distinctive. Without this
+    # stoplist (matching the headline check above), any 6+ letter word the
+    # comment happens to share with the post text counts as personalization,
+    # even a generic one like "activation" or "strategy" that would show up
+    # in a templated comment on almost any post in the same topic. That gap
+    # is exactly why 58/58 templated audit comments scored 100/100 on
+    # 2026-08-21: every one was "about" the post's own generic vocabulary.
     context = value("context") or {}
     if isinstance(context, dict):
         snippet = str(context.get("post_text") or "")
         for word in re.findall(r"\b[a-z]{6,}\b", snippet.lower())[:40]:
-            if word in lowered:
+            if word in lowered and word not in _GENERIC_HEADLINE_WORDS:
                 signals.append("their_post")
                 break
 

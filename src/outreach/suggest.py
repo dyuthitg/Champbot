@@ -87,12 +87,22 @@ async def generate_suggestions(
     # Warm-up gate. An account that hasn't earned outreach yet doesn't get a
     # queue at all -- there is no point asking a human to approve invitations
     # the account is not permitted to send.
+    #
+    # Fixed 2026-09-02: this used to check only connect and message, so an
+    # account in the "commenting" warm-up stage -- which explicitly *can*
+    # comment -- got zero suggestions and a message blaming 'connect', an
+    # action nobody was trying to use. Comment is a suggestable action too
+    # (see `permitted` below); it belongs in this gate.
     report = await health_module.account_health(db, account)
-    allowed, reason = warmup_service.can_perform(account, SuggestionAction.CONNECT, report)
-    message_allowed, _ = warmup_service.can_perform(
-        account, SuggestionAction.MESSAGE, report
-    )
-    if not allowed and not message_allowed:
+    action_gate = {
+        action: warmup_service.can_perform(account, action, report)
+        for action in (SuggestionAction.CONNECT, SuggestionAction.MESSAGE, SuggestionAction.COMMENT)
+    }
+    permitted = {action for action, (allowed, _) in action_gate.items() if allowed}
+    if not permitted:
+        # All three come from the same stage gate and differ only in which
+        # action name is embedded in the reason -- any one of them is honest.
+        _, reason = next(iter(action_gate.values()))
         return {
             "created": [],
             "considered": 0,
@@ -115,15 +125,7 @@ async def generate_suggestions(
     skipped: dict = {}
     scored: List[tuple] = []
 
-    permitted = {
-        action
-        for action in (
-            SuggestionAction.CONNECT,
-            SuggestionAction.MESSAGE,
-            SuggestionAction.COMMENT,
-        )
-        if warmup_service.can_perform(account, action, report)[0]
-    }
+    # `permitted` was already computed above, from the same action_gate.
 
     for target in targets:
         action = _action_for(account, target)

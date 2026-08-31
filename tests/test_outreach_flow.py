@@ -217,6 +217,36 @@ async def test_no_icp_means_no_suggestions(db, org, account):
     assert "No ICP" in result["message"]
 
 
+async def test_an_account_that_can_comment_but_not_connect_still_gets_suggestions(
+    db, org, account, icp
+):
+    """
+    Regression test for the Aug 26 2026 UI audit finding: an account in the
+    "converse" (Commenting) warm-up stage can comment but not yet connect or
+    message. The gate used to check only connect/message, so this account got
+    zero suggestions and a message blaming 'connect' -- an action nobody was
+    trying to use -- even with comment-eligible targets waiting.
+    """
+    from src.warmup import planner, program
+
+    planner.set_stage(account, "converse")
+    await db.commit()
+    await db.refresh(account)
+
+    created, _ = await _import(db, org, account, icp, [GOOD_FIT])
+    created[0].context = {
+        "post_urn": "urn:li:activity:1",
+        "post_text": "We rebuilt onboarding around one metric.",
+    }
+    await db.commit()
+
+    result = await engine.generate_suggestions(db, account, icp)
+
+    assert len(result["created"]) == 1
+    assert result["created"][0].action == SuggestionAction.COMMENT
+    assert "connect" not in (result.get("message") or "")
+
+
 async def test_capacity_is_read_from_the_live_rate_limiter(
     db, org, warm_account, icp, rate_limiter
 ):
