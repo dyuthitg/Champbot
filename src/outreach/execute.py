@@ -25,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.accounts import caps as caps_policy
-from src.accounts.service import LiveAccount, load_live_account
+from src.accounts.service import LiveAccount, load_live_account, set_status
 from src.infrastructure.transports.base import TransportChallenge, TransportError
 from src.outreach import pacing, sequences
 from src.outreach.models import OutreachSuggestion, SuggestionAction, SuggestionStatus
@@ -95,6 +95,29 @@ async def approve(
     if target is not None:
         target.status = TargetStatus.APPROVED
 
+    # Ledger entry: the existing audit trail (see src/warmup/models.py),
+    # reused rather than inventing a second log. Written only once we're past
+    # the status guard above, so calling approve twice on the same item
+    # raises ExecutionBlocked on the second call and never double-logs.
+    from src.warmup import service as warmup_service
+    from src.warmup.models import ActivityStatus
+
+    await warmup_service.record(
+        db,
+        account,
+        "approve",
+        status=ActivityStatus.OK,
+        subject_urn=suggestion.subject_urn,
+        target_id=suggestion.target_id,
+        variant=suggestion.variant,
+        detail={
+            "suggestion_id": str(suggestion.id),
+            "edited": edited_text is not None,
+            "reviewer_id": reviewer_id,
+        },
+        commit=False,
+    )
+
     await db.commit()
     await db.refresh(suggestion)
     return suggestion
@@ -106,6 +129,8 @@ async def reject(
     *,
     reviewer_id: Optional[str] = None,
     suppress_target: bool = False,
+    reason: Optional[str] = None,
+    account: Any = None,
 ) -> OutreachSuggestion:
     """
     Reject a suggestion.
@@ -113,7 +138,14 @@ async def reject(
     ``suppress_target`` is the "never contact this person" switch: it puts the
     target permanently out of reach of every future suggestion, for every
     action. That is what makes "no" mean no.
+
+    ``reason`` is stored on the audit ledger, not on the suggestion itself --
+    it's the data that improves the prompt later, not something the review
+    screen needs to keep displaying.
     """
+    if suggestion.status not in (SuggestionStatus.PENDING, SuggestionStatus.BLOCKED):
+        raise ExecutionBlocked(f"cannot reject a suggestion that is {suggestion.status}")
+
     suggestion.status = SuggestionStatus.REJECTED
     suggestion.reviewed_at = datetime.now(timezone.utc)
     if reviewer_id:
@@ -124,6 +156,30 @@ async def reject(
         target.status = (
             TargetStatus.SUPPRESSED if suppress_target else TargetStatus.SCORED
         )
+
+    # Ledger entry, same trail approve() writes to. Guarded by the status
+    # check above, so a second reject on the same item is refused before it
+    # ever reaches this line -- no duplicate entry.
+    from src.warmup import service as warmup_service
+    from src.warmup.models import ActivityStatus
+
+    account = account or await _load_account_record(db, suggestion)
+    await warmup_service.record(
+        db,
+        account,
+        "reject",
+        status=ActivityStatus.OK,
+        subject_urn=suggestion.subject_urn,
+        target_id=suggestion.target_id,
+        variant=suggestion.variant,
+        detail={
+            "suggestion_id": str(suggestion.id),
+            "reason": reason,
+            "suppress_target": suppress_target,
+            "reviewer_id": reviewer_id,
+        },
+        commit=False,
+    )
 
     await db.commit()
     await db.refresh(suggestion)
@@ -228,7 +284,7 @@ async def execute_suggestion(
         # a restriction.
         from src.accounts.models import AccountStatus
 
-        record.status = AccountStatus.RATE_LIMITED
+        set_status(record, AccountStatus.RATE_LIMITED)
         suggestion.status = SuggestionStatus.FAILED
         suggestion.error = str(exc)
         await db.commit()

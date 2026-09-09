@@ -291,6 +291,26 @@ export interface TargetSummary {
   location?: string;
   profile_url?: string;
   status?: string;
+  /** What the suggestion is replying to — an operator can't judge a
+   * comment without seeing the post it's a reply to. */
+  post_text?: string;
+  post_urn?: string;
+}
+
+/** One named guardrail a draft broke. The wording comes from the rule table
+ * in src/outreach/quality.py — never retyped here — so a rule is called the
+ * same thing in the spec, in the gate, and on the chip. */
+export interface QualityFlag {
+  /** 'R2', 'R4', 'DUP' … what the queue groups and filters by. */
+  code: string;
+  /** Short operator-facing name: 'Too long', 'Generic phrase'. */
+  label: string;
+  severity: 'blocker' | 'warning' | 'advisory';
+  /** The specific sentence: '412 characters (limit 400)'. */
+  detail: string;
+  /** Heading in COMMENT_QUALITY_SPEC_V1.md, or null for a check that runs in
+   * the code but isn't in the spec yet. */
+  spec_ref?: string | null;
 }
 
 export interface Suggestion {
@@ -317,6 +337,18 @@ export interface Suggestion {
    * src/outreach/similarity.py. Empty when nothing queued is close enough
    * to flag. */
   similar_to?: string[];
+  /** Every guardrail this draft breaks, named. Re-checked server-side
+   * against the text as it stands now, so it stays true after a hand edit. */
+  quality_flags?: QualityFlag[];
+}
+
+/** One page of the review queue. `total` counts the whole queue, not the
+ *  page — a screen showing 50 of 412 has to be able to say so. */
+export interface SuggestionPage {
+  suggestions: Suggestion[];
+  total: number;
+  offset: number;
+  has_more: boolean;
 }
 
 export interface GenerateResult {
@@ -339,6 +371,16 @@ export interface ActivityItem {
   error?: string;
 }
 
+export interface CapToday {
+  used: number;
+  cap: number;
+  week_used: number | null;
+  week_cap: number | null;
+  /** false when there's no Redis connected to enforce/measure the cap —
+   *  distinct from `used: 0`, which would read as healthy. */
+  tracked: boolean;
+}
+
 export interface AccountStats {
   account_id: string;
   display_name?: string;
@@ -359,6 +401,18 @@ export interface AccountStats {
   health_headline: string;
   throttle: number;
   funnel: Partial<Funnel>;
+  /** What someone checks at 9am to know the bot is alive. */
+  caps_today: Record<string, CapToday>;
+  quiet_hours_now: boolean;
+  weekend_now: boolean;
+  /** When the current `status` started — e.g. when the session expired. */
+  status_since?: string;
+  /** When the scheduler last swept this account. */
+  last_run_at?: string;
+  last_run_ok?: boolean;
+  /** e.g. "send: TransportError: session expired" */
+  last_error?: string;
+  last_error_at?: string;
 }
 
 export interface Dashboard {

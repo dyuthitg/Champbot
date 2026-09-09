@@ -21,6 +21,13 @@ const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as
 
 export const authEnabled = Boolean(PUBLISHABLE_KEY);
 
+// Local-only dev token: {"sub":"local-dev-ui","email":"local@example.com","exp":9999999999},
+// HS256-signed with the same throwaway secret scripts/validate_account.py uses. The signature
+// is never checked when the backend runs with CLERK_DEV_UNSAFE=true, so this only unlocks
+// anything against a server explicitly opted into that insecure mode.
+const LOCAL_DEV_TOKEN =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsb2NhbC1kZXYtdWkiLCJlbWFpbCI6ImxvY2FsQGV4YW1wbGUuY29tIiwiZXhwIjo5OTk5OTk5OTk5fQ.gp7gcH7pYxamP0CUbl7GT45KEmFOD3r1TA2UuuJAH0Q';
+
 function TokenBridge() {
   const { getToken, isSignedIn } = useAuth();
   useEffect(() => {
@@ -32,7 +39,13 @@ function TokenBridge() {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (!authEnabled) {
-    // Demo mode: no Clerk configured.
+    // Demo mode: no Clerk configured. In a local dev server (not a production
+    // build) attach the throwaway dev token so the app is actually usable
+    // against a backend running with CLERK_DEV_UNSAFE=true; a real deploy
+    // still renders with no token at all.
+    if (import.meta.env.DEV) {
+      setAuthTokenGetter(async () => LOCAL_DEV_TOKEN);
+    }
     return <>{children}</>;
   }
   return (

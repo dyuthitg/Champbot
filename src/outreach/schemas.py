@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class GenerateRequest(BaseModel):
@@ -30,6 +30,31 @@ class TargetSummary(BaseModel):
     location: Optional[str] = None
     profile_url: Optional[str] = None
     status: Optional[str] = None
+    # What the suggestion is replying to. An operator can't judge a comment
+    # without seeing the post it's a reply to -- this was missing entirely
+    # until 2026-09-01; see OutreachTarget.context in src/targeting/models.py.
+    post_text: Optional[str] = None
+    post_urn: Optional[str] = None
+
+
+class QualityFlagOut(BaseModel):
+    """
+    One named guardrail a draft broke.
+
+    The wording is not composed here: ``label`` comes straight from the rule
+    table in ``src/outreach/quality.py`` so a rule is called the same thing in
+    the spec, in the gate, and on the chip the operator reads. ``code`` is what
+    the queue groups and filters by.
+    """
+
+    code: str
+    label: str
+    # blocker (cannot be approved) | warning (costs score) | advisory (shown only)
+    severity: str
+    detail: str
+    # Heading in COMMENT_QUALITY_SPEC_V1.md, or null for a check that runs in
+    # the code but was never written into the spec.
+    spec_ref: Optional[str] = None
 
 
 class SuggestionResponse(BaseModel):
@@ -58,11 +83,30 @@ class SuggestionResponse(BaseModel):
     # -- see src/outreach/similarity.py. Empty when nothing else queued is
     # close enough to flag.
     similar_to: List[str] = Field(default_factory=list)
+    # Every guardrail this draft breaks, named. quality_warnings above stays
+    # as it was (free-text sentences, written at generation time); this is the
+    # same findings re-checked against the text as it stands now, plus the
+    # advisory-only rules, each tagged with the rule it broke so the queue can
+    # show a chip and filter by failure type.
+    quality_flags: List[QualityFlagOut] = Field(default_factory=list)
 
 
 class SuggestionListResponse(BaseModel):
+    """
+    One page of the review queue.
+
+    ``total`` used to be ``len(suggestions)`` -- the size of the page, not the
+    size of the queue -- so a screen showing 200 of 400 items had no way to
+    know the other 200 existed, and no way to say so. It is now a real count of
+    everything matching the filter.
+    """
+
     suggestions: List[SuggestionResponse]
     total: int
+    # Where this page started and how many more there are after it. The queue
+    # screen needs both to say "showing 50 of 412" and to fetch the next page.
+    offset: int = 0
+    has_more: bool = False
 
 
 class GenerateResponse(BaseModel):
@@ -92,7 +136,17 @@ class RejectRequest(BaseModel):
     suppress_target: bool = Field(
         False, description="Also block this person from all future suggestions"
     )
-    reason: Optional[str] = None
+    # Required, not optional -- this is the data that improves the prompt
+    # later. A reject with no reason teaches the system nothing.
+    reason: str = Field(..., min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def reason_is_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("reason cannot be blank")
+        return value
 
 
 class RunDueResponse(BaseModel):
@@ -148,6 +202,22 @@ class AccountStats(BaseModel):
     health_headline: str = ""
     throttle: float = 1.0
     funnel: dict = Field(default_factory=dict)
+
+    # Run-status: what someone checks at 9am to know the bot is alive.
+    caps_today: dict = Field(
+        default_factory=dict, description="Per action: {used, cap, week_used, week_cap, tracked}"
+    )
+    quiet_hours_now: bool = False
+    weekend_now: bool = False
+    status_since: Optional[datetime] = Field(
+        None, description="When the current status started, e.g. when the session expired"
+    )
+    last_run_at: Optional[datetime] = Field(None, description="When the scheduler last swept this account")
+    last_run_ok: Optional[bool] = None
+    last_error: Optional[str] = Field(
+        None, description="The most recent stage error, e.g. 'send: TransportError: ...'"
+    )
+    last_error_at: Optional[datetime] = None
 
 
 class DashboardResponse(BaseModel):

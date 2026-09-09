@@ -205,6 +205,39 @@ def timezone_of(account) -> Optional[str]:
     return _settings(account).get("timezone")
 
 
+def _localize(account, now: datetime) -> datetime:
+    tzname = timezone_of(account)
+    if not tzname:
+        return now
+    try:
+        from zoneinfo import ZoneInfo
+
+        return now.astimezone(ZoneInfo(tzname))
+    except Exception:
+        # An unknown/misconfigured tz name should never crash a status check;
+        # it just means the window is read in UTC instead of local time.
+        return now
+
+
+def in_quiet_hours(account, *, now: Optional[datetime] = None) -> bool:
+    """
+    Is *right now* outside this account's active-hours window?
+
+    This exists so the UI can say "quiet hours — nothing will send until 8am"
+    instead of someone mistaking a scheduler behaving exactly as designed for
+    a bug.
+    """
+    now = _localize(account, now or datetime.now(timezone.utc))
+    start, end = active_hours(account)
+    return not (start <= now.hour < end)
+
+
+def is_weekend(account, *, now: Optional[datetime] = None) -> bool:
+    """Is it currently a weekend day in this account's timezone?"""
+    now = _localize(account, now or datetime.now(timezone.utc))
+    return now.weekday() >= 5
+
+
 def default_caps_payload(tier: str = DEFAULT_TIER) -> dict:
     """The settings blob written onto a newly connected account."""
     return {
@@ -227,4 +260,6 @@ def describe(account, *, throttle: float = 1.0) -> dict:
         "timezone": timezone_of(account) or "UTC",
         "throttle": round(throttle, 2),
         "weekend_multiplier": WEEKEND_MULTIPLIER,
+        "quiet_hours_now": in_quiet_hours(account),
+        "weekend_now": is_weekend(account),
     }

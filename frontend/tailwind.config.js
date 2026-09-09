@@ -6,8 +6,11 @@ export default {
   ],
   theme: {
     extend: {
-      // Design tokens. Eight colours, five type sizes, four radii — the
+      // Design tokens. Nine colours, five type sizes, four radii — the
       // set the Review Queue components need and nothing beyond it.
+      // (Nine, not eight: `warn` was added 2026-09-04 for the guardrail
+      // chips and the live length counter. "Nearly at the limit" and "over
+      // it" are different states and were being drawn with the same red.)
       // Contrast-checked against WCAG AA (4.5:1 text, 3:1 large text/UI) —
       // see docs/CONTRAST_CHECK.md for every pair and its ratio.
       colors: {
@@ -22,8 +25,21 @@ export default {
         surface: '#1e293b',   // card / panel background (slate-800)
         muted: '#94a3b8',     // secondary text (slate-400)
         accent: '#a855f7',    // primary actions, focus, brand (purple-500)
-        success: '#047857',   // approve / positive (emerald-700 — emerald-500 failed white-text contrast at 2.54:1)
-        danger: '#ef4444',    // destructive / blocking (red-500)
+        // success and danger each carry two values: the fill (white text sits
+        // on it) and `-fg`, the text colour for when the same meaning has to
+        // be written *on* a dark surface. A fill dark enough for white text
+        // is far too dark to be text itself — success as text measured
+        // 2.36:1 on a tinted chip, danger 3.40:1, both under AA's 4.5:1.
+        // See docs/CONTRAST_CHECK.md.
+        success: {
+          DEFAULT: '#047857',  // approve / positive fill (emerald-700 — emerald-500 failed white-text contrast at 2.54:1)
+          fg: '#34d399',       // the same meaning as text on dark (emerald-400)
+        },
+        warn: '#f59e0b',      // approaching a limit, or a rule broken that doesn't block (amber-500)
+        danger: {
+          DEFAULT: '#ef4444',  // destructive / blocking fill (red-500)
+          fg: '#f87171',       // the same meaning as text on dark (red-400)
+        },
         linkedin: {
           50: '#e7f3ff',
           100: '#d0e7ff',

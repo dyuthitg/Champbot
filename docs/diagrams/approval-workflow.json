@@ -1,0 +1,55 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Social Bot — Approval Workflow",
+    "output": "approval-workflow.html",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "the-loop", "label": "The full loop", "focus": ["trigger", "draft", "gate", "queue", "decide", "scheduled", "sent"], "note": "From one click to a paced send, with a human in the middle of it." },
+      { "id": "safety", "label": "What can stop it", "focus": ["gate", "decide", "confirm", "suppressed"], "note": "Two separate safety points: an automatic gate, and a required human confirm on the one irreversible action." }
+    ]
+  },
+  "lanes": [
+    { "id": "operator", "label": "Operator" },
+    { "id": "pipeline", "label": "Suggestion Pipeline" },
+    { "id": "safety", "label": "Safety Gates", "variant": "exception" },
+    { "id": "delivery", "label": "Delivery" }
+  ],
+  "phases": [
+    { "id": "generate", "label": "Generate & draft", "fromCol": 0, "toCol": 1 },
+    { "id": "review", "label": "Human review", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "deliver", "label": "Deliver", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "quality-gate", "label": "Quality + repetition check", "lane": "safety", "fromCol": 1, "toCol": 1, "variant": "security" },
+    { "id": "destructive-guard", "label": "Destructive-action guard", "lane": "safety", "fromCol": 4, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["trigger", "draft", "gate", "queue", "decide", "scheduled", "sent"],
+  "nodes": [
+    { "id": "trigger", "lane": "pipeline", "col": 0, "type": "frontend", "label": "Suggest & Score", "sublabel": "click scores the targets", "width": 150 },
+    { "id": "draft", "lane": "pipeline", "col": 1, "type": "backend", "label": "Draft the Copy", "sublabel": "LLM writes it", "width": 150 },
+    { "id": "gate", "lane": "safety", "col": 1, "type": "security", "label": "Quality + Repeat Gate", "sublabel": "score + compare to batch", "tag": "blocks or flags", "width": 150 },
+    { "id": "queue", "lane": "operator", "col": 2, "type": "frontend", "label": "Review Queue", "sublabel": "Approvals page", "width": 150 },
+    { "id": "decide", "lane": "operator", "col": 3, "type": "external", "label": "Operator Decides", "sublabel": "approve / edit / skip", "width": 150 },
+    { "id": "confirm", "lane": "safety", "col": 4, "type": "security", "label": "Confirm Step", "sublabel": "Never Contact only", "tag": "2nd tap required", "width": 150 },
+    { "id": "scheduled", "lane": "delivery", "col": 4, "type": "database", "label": "Scheduled", "sublabel": "queued in the database", "width": 150 },
+    { "id": "suppressed", "lane": "safety", "col": 5, "type": "security", "label": "Suppressed Forever", "sublabel": "never contacted again", "width": 150 },
+    { "id": "sent", "lane": "delivery", "col": 5, "type": "cloud", "label": "Sent, Paced", "sublabel": "scheduler — off by default", "width": 150 }
+  ],
+  "edges": [
+    { "id": "trigger-draft", "from": "trigger", "to": "draft", "variant": "default" },
+    { "id": "draft-gate", "from": "draft", "to": "gate", "label": "checked before showing", "variant": "security" },
+    { "id": "gate-queue", "from": "gate", "to": "queue", "label": "passes", "variant": "emphasis" },
+    { "id": "queue-decide", "from": "queue", "to": "decide", "label": "operator reviews", "variant": "emphasis" },
+    { "id": "decide-scheduled", "from": "decide", "to": "scheduled", "label": "approve", "variant": "emphasis" },
+    { "id": "decide-confirm", "from": "decide", "to": "confirm", "label": "never contact", "variant": "security", "role": "branch" },
+    { "id": "confirm-suppressed", "from": "confirm", "to": "suppressed", "label": "confirmed", "variant": "security", "role": "error" },
+    { "id": "scheduled-sent", "from": "scheduled", "to": "sent", "label": "paced, once turned on", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "violet", "title": "Two separate safety points", "items": ["The quality gate runs automatically, before the operator ever sees the draft", "The confirm step is manual and only on the one action that can't be undone"] },
+    { "dot": "amber", "title": "Nothing sends by default", "items": ["Approving schedules the send — it does not send it", "The scheduler that actually reaches LinkedIn is off by default"] },
+    { "dot": "rose", "title": "Skip isn't in this diagram", "items": ["Skip returns to the pool with no state change and no safety concern — approve and suppress are the two paths that matter"] }
+  ]
+}

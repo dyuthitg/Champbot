@@ -111,6 +111,111 @@ async def test_a_rejected_cookie_marks_the_account_auth_required(db, org):
 
 
 # ----------------------------------------------------------------------
+# Account health / run status: what someone checks at 9am to know the bot
+# is alive.
+# ----------------------------------------------------------------------
+
+
+async def test_dashboard_shows_when_a_session_expired_and_why(db, org, account):
+    """
+    Break something on purpose: an expired session must be visible with a
+    timestamp, not just a status word -- that's the difference between "check
+    the dashboard" and "go read logs".
+    """
+    from types import SimpleNamespace
+
+    from src.accounts.service import check_health
+    from src.api.routes.outreach import dashboard
+    from tests.conftest import RecordingTransport
+
+    organization, _ = org
+
+    before = await dashboard(_fake_request(), ctx=_fake_ctx(organization), db=db)
+    row = before.accounts[0]
+    assert row.status == "active"
+    connected_since = row.status_since
+    assert connected_since is not None  # connecting is itself a status change
+
+    broken = RecordingTransport(fail_with="session no longer valid")
+    result = await check_health(db, account, transport=broken)
+    assert result["ok"] is False
+    assert account.status == "auth_required"
+
+    after = await dashboard(_fake_request(), ctx=_fake_ctx(organization), db=db)
+    row = after.accounts[0]
+    assert row.status == "auth_required"
+    # The stamp moves with the transition -- this is what lets the UI say
+    # "expired 2 hours ago" instead of "recently, we think".
+    assert row.status_since is not None
+    assert row.status_since > connected_since
+
+
+async def test_dashboard_shows_the_last_run_and_its_error(db, org, account):
+    """
+    A scheduler sweep's outcome must survive on the account, not just in a log
+    line -- otherwise a dead scheduler and a quiet one look identical here too.
+    """
+    from src.accounts.service import record_run_outcome
+    from src.api.routes.outreach import dashboard
+
+    organization, _ = org
+
+    await record_run_outcome(db, account, errors={"sync": "TransportError: timed out"})
+
+    result = await dashboard(_fake_request(), ctx=_fake_ctx(organization), db=db)
+    row = result.accounts[0]
+    assert row.last_run_at is not None
+    assert row.last_run_ok is False
+    assert row.last_error == "sync: TransportError: timed out"
+    assert row.last_error_at is not None
+
+    await record_run_outcome(db, account, errors=None)
+    result = await dashboard(_fake_request(), ctx=_fake_ctx(organization), db=db)
+    row = result.accounts[0]
+    assert row.last_run_ok is True
+    # A resolved run doesn't erase the record of what broke earlier.
+    assert row.last_error == "sync: TransportError: timed out"
+
+
+async def test_dashboard_does_not_report_a_failed_cap_read_as_healthy(db, org, account):
+    """
+    A Redis read that raises must not render as "0 used" -- that's
+    indistinguishable from a genuinely healthy, quiet account, which is
+    exactly the failure this view exists to make loud instead of silent.
+    """
+    from types import SimpleNamespace
+
+    from src.api.routes.outreach import dashboard
+
+    organization, _ = org
+
+    class _BrokenRedis:
+        def pipeline(self):
+            raise RuntimeError("redis unavailable")
+
+    broken_request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(redis=_BrokenRedis()))
+    )
+
+    result = await dashboard(broken_request, ctx=_fake_ctx(organization), db=db)
+    row = result.accounts[0]
+    assert row.caps_today["connect"]["tracked"] is False
+    assert row.caps_today["connect"]["used"] == 0
+
+
+def _fake_request():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(redis=None)))
+
+
+def _fake_ctx(organization):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(org_id=str(organization.id))
+
+
+# ----------------------------------------------------------------------
 # Targeting
 # ----------------------------------------------------------------------
 
@@ -174,6 +279,30 @@ async def test_suggestions_explain_why_this_person(db, org, warm_account, icp):
     suggestion = result["created"][0]
     assert suggestion.relevance_reasons
     assert any("Title matches" in r for r in suggestion.relevance_reasons)
+
+
+async def test_the_source_post_is_returned_with_the_suggestion(db, org, warm_account, icp):
+    """
+    Regression test for the 2026-09-01 gap: an operator can't judge a
+    comment without seeing what it replies to, and the API used to drop
+    the source post on the floor -- TargetSummary simply had no field for
+    it, even though it's stored right there on the target.
+    """
+    from src.api.routes.outreach import _serialize
+
+    created, _ = await _import(db, org, warm_account, icp, [GOOD_FIT])
+    created[0].context = {
+        "post_urn": "urn:li:activity:900001",
+        "post_text": "We rebuilt onboarding around one metric.",
+    }
+    await db.commit()
+
+    result = await engine.generate_suggestions(db, warm_account, icp)
+    suggestion = result["created"][0]
+
+    response = await _serialize(db, suggestion)
+    assert response.target.post_text == "We rebuilt onboarding around one metric."
+    assert response.target.post_urn == "urn:li:activity:900001"
 
 
 async def test_the_same_person_is_never_suggested_twice(db, org, warm_account, icp):
@@ -319,13 +448,118 @@ async def test_rejecting_with_suppression_blocks_all_future_contact(
     db, org, warm_account, icp
 ):
     suggestion = await _one_suggestion(db, org, warm_account, icp)
-    await executor.reject(db, suggestion, suppress_target=True)
+    await executor.reject(
+        db, suggestion, account=warm_account, suppress_target=True, reason="not a fit"
+    )
 
     assert suggestion.status == SuggestionStatus.REJECTED
 
     # The person is now out of reach of every future generation run.
     again = await engine.generate_suggestions(db, warm_account, icp)
     assert again["created"] == []
+
+
+async def test_reject_reason_is_required_by_the_schema():
+    """
+    The 2026-09-02 brief: the reject reason is not optional, it is the data
+    that improves the prompt later. Enforced at the request boundary so no
+    caller -- not just the review screen -- can skip it.
+    """
+    from pydantic import ValidationError
+
+    from src.outreach.schemas import RejectRequest
+
+    with pytest.raises(ValidationError):
+        RejectRequest(suppress_target=False, reason="")
+
+    with pytest.raises(ValidationError):
+        RejectRequest(suppress_target=False, reason="   ")
+
+    with pytest.raises(ValidationError):
+        RejectRequest(suppress_target=False)
+
+    ok = RejectRequest(suppress_target=False, reason="too generic")
+    assert ok.reason == "too generic"
+
+
+async def test_approve_writes_one_ledger_entry_and_a_second_approve_is_refused(
+    db, org, warm_account, icp
+):
+    """
+    2026-09-02 ship criteria: run the flow twice on the same item. It must
+    not double-post or duplicate an audit entry.
+    """
+    from sqlalchemy import select
+
+    from src.warmup.models import AccountActivity
+
+    _, user = org
+    suggestion = await _one_suggestion(db, org, warm_account, icp)
+    await executor.approve(db, suggestion, account=warm_account, reviewer_id=str(user.id))
+
+    rows = (
+        await db.execute(
+            select(AccountActivity).where(
+                AccountActivity.action == "approve",
+                AccountActivity.target_id == suggestion.target_id,
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].detail["suggestion_id"] == str(suggestion.id)
+    assert rows[0].detail["reviewer_id"] == str(user.id)
+
+    # Running it again on the same, now-scheduled item must not double-post
+    # or write a second ledger entry.
+    with pytest.raises(executor.ExecutionBlocked):
+        await executor.approve(db, suggestion, account=warm_account)
+
+    rows_after = (
+        await db.execute(
+            select(AccountActivity).where(
+                AccountActivity.action == "approve",
+                AccountActivity.target_id == suggestion.target_id,
+            )
+        )
+    ).scalars().all()
+    assert len(rows_after) == 1
+
+
+async def test_reject_writes_the_reason_to_the_ledger_and_a_second_reject_is_refused(
+    db, org, warm_account, icp
+):
+    from sqlalchemy import select
+
+    from src.warmup.models import AccountActivity
+
+    suggestion = await _one_suggestion(db, org, warm_account, icp)
+    await executor.reject(
+        db, suggestion, account=warm_account, reason="comment reads generic"
+    )
+
+    rows = (
+        await db.execute(
+            select(AccountActivity).where(
+                AccountActivity.action == "reject",
+                AccountActivity.target_id == suggestion.target_id,
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].detail["reason"] == "comment reads generic"
+
+    with pytest.raises(executor.ExecutionBlocked):
+        await executor.reject(db, suggestion, account=warm_account, reason="again")
+
+    rows_after = (
+        await db.execute(
+            select(AccountActivity).where(
+                AccountActivity.action == "reject",
+                AccountActivity.target_id == suggestion.target_id,
+            )
+        )
+    ).scalars().all()
+    assert len(rows_after) == 1
 
 
 # ----------------------------------------------------------------------

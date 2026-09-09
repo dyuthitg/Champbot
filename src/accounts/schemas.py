@@ -81,6 +81,21 @@ class AccountResponse(BaseModel):
     last_active_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
 
+    # Run-status fields: what someone checks to know the bot is alive.
+    status_since: Optional[datetime] = Field(
+        None, description="When the current status started (e.g. when the session expired)"
+    )
+    last_run_at: Optional[datetime] = Field(
+        None, description="When the scheduler last swept this account"
+    )
+    last_run_ok: Optional[bool] = Field(
+        None, description="Whether that last sweep completed with no stage errors"
+    )
+    last_error: Optional[str] = Field(
+        None, description="The most recent stage error, e.g. 'send: TransportError: ...'"
+    )
+    last_error_at: Optional[datetime] = None
+
 
 class AccountListResponse(BaseModel):
     accounts: list[AccountResponse]

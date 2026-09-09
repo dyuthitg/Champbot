@@ -149,10 +149,10 @@ async def preflight(
     # A successful probe means the session is good; keep the stored status in
     # step with what we just observed.
     if report.ok and record.status != AccountStatus.ACTIVE:
-        record.status = AccountStatus.ACTIVE
+        accounts_service.set_status(record, AccountStatus.ACTIVE)
         await db.commit()
     elif not report.ok:
-        record.status = AccountStatus.AUTH_REQUIRED
+        accounts_service.set_status(record, AccountStatus.AUTH_REQUIRED)
         await db.commit()
 
     return report.as_dict()

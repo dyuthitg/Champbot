@@ -77,6 +77,11 @@ class FakeSession:
 
         return Result()
 
+    async def commit(self):
+        # Enough for accounts_service.record_run_outcome, which the tick
+        # commits through at the end of every live account run.
+        return None
+
     async def __aenter__(self):
         return self
 

@@ -37,8 +37,13 @@ MAX_ATTEMPTS = 3
 _STYLE_RULES = """\
 Voice and rules — follow all of them:
 - Write like one professional messaging another, not like marketing copy.
-- Reference something specific and true about them from the profile details
-  given. If you cannot ground a claim in those details, leave it out.
+- Before you write anything, find the ONE most distinctive, unusual detail in
+  what you were given — a specific number, an admission, an unusual choice,
+  a concrete consequence. Not their industry, not their job title, not the
+  general topic of their post — the one detail that would NOT also be true
+  of five other people's similar update. Build the whole comment around that
+  detail. There is almost always one in the text you were given; look again
+  before settling for their industry or job title as the "specific" detail.
 - Never invent facts, mutual connections, shared events, or prior conversations.
 - No flattery ("impressive background", "love what you're doing").
 - Banned phrases: "I hope this finds you well", "quick question", "just

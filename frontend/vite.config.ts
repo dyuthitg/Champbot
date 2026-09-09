@@ -16,15 +16,15 @@ export default defineConfig({
       // Pass /api/v1/* straight through to the backend (no path rewrite):
       // the backend serves the versioned prefix directly.
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8010',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: 'ws://localhost:8010',
         ws: true,
       },
       '/healthz': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8010',
         changeOrigin: true,
       },
     },

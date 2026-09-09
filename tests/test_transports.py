@@ -144,6 +144,149 @@ async def test_mobile_scaffold_signals_unavailable():
         await mobile.like(_account(), "urn:activity:1")
 
 
+# --- Mobile fetch_profile / fetch_activity endpoint shapes ---
+
+
+class FakeResponse:
+    def __init__(self, status_code=200, body=None):
+        self.status_code = status_code
+        self._body = body if body is not None else {}
+
+    def json(self):
+        return self._body
+
+
+class FakeVoyagerSession:
+    """Returns canned responses keyed by a substring of the requested path."""
+
+    def __init__(self, routes):
+        # routes: list of (substring, response); first match wins.
+        self.routes = routes
+        self.urls = []
+
+    def request(self, method, url, **kwargs):
+        self.urls.append(url)
+        for substring, response in self.routes:
+            if substring in url:
+                return response
+        return FakeResponse(status_code=404, body={})
+
+
+def _gql_profile_body(urn="urn:li:fsd_profile:ACoA123", name=("Ada", "Lovelace")):
+    # Mirrors the live envelope: resolved URNs under data.data.*, entities at
+    # top-level "included".
+    return {
+        "data": {
+            "data": {
+                "identityDashProfilesByMemberIdentity": {"*elements": [urn]},
+            },
+        },
+        "included": [
+            {
+                "$type": "com.linkedin.voyager.dash.identity.profile.Profile",
+                "entityUrn": urn,
+                "firstName": name[0],
+                "lastName": name[1],
+                "headline": "Engineer",
+            }
+        ],
+    }
+
+
+async def test_fetch_profile_uses_gql_member_identity_shape():
+    session = FakeVoyagerSession(
+        [("queryId=voyagerIdentityDashProfiles.", FakeResponse(body=_gql_profile_body()))]
+    )
+    mobile = MobileAPITransport(session_factory=lambda acct: session)
+
+    result = await mobile.fetch_profile(_account(), "https://www.linkedin.com/in/ada-lovelace/")
+
+    assert result.success
+    assert result.detail["shape"] == "gql-memberIdentity"
+    assert result.detail["member_urn"] == "urn:li:fsd_profile:ACoA123"
+    assert result.detail["display_name"] == "Ada Lovelace"
+    # The handle was extracted from the URL and sent unquoted.
+    assert "(memberIdentity:ada-lovelace)" in session.urls[0]
+
+
+async def test_fetch_profile_falls_back_to_legacy_when_gql_dead():
+    session = FakeVoyagerSession(
+        [
+            ("queryId=", FakeResponse(status_code=400, body={})),
+            (
+                "/profileView",
+                FakeResponse(
+                    body={
+                        "profile": {
+                            "entityUrn": "urn:li:fs_miniProfile:42",
+                            "firstName": "Grace",
+                            "headline": "Admiral",
+                        }
+                    }
+                ),
+            ),
+        ]
+    )
+    mobile = MobileAPITransport(session_factory=lambda acct: session)
+
+    result = await mobile.fetch_profile(_account(), "grace-hopper")
+
+    assert result.success
+    assert result.detail["shape"] == "legacy-profileView"
+    assert result.detail["member_urn"] == "urn:li:fs_miniProfile:42"
+
+
+async def test_fetch_profile_unavailable_when_all_shapes_fail():
+    session = FakeVoyagerSession([])
+    mobile = MobileAPITransport(session_factory=lambda acct: session)
+
+    with pytest.raises(TransportUnavailable) as excinfo:
+        await mobile.fetch_profile(_account(), "nobody")
+
+    # Both failures must be reported so drift is diagnosable from the message.
+    assert "gql-memberIdentity" in str(excinfo.value)
+    assert "HTTP 404" in str(excinfo.value)
+
+
+async def test_fetch_activity_uses_gql_content_collections_shape():
+    body = {
+        "included": [
+            {
+                "$type": "com.linkedin.voyager.dash.creatorprofile."
+                "ProfileContentCollectionsComponent",
+                "entityUrn": "urn:li:fsd_profileContentCollectionsComponent:1",
+            },
+            {
+                "$type": "com.linkedin.voyager.dash.feed.Post",
+                "entityUrn": "urn:li:share:700",
+                "commentary": {"text": {"text": "hello world"}},
+            },
+        ]
+    }
+    session = FakeVoyagerSession(
+        [("queryId=voyagerIdentityDashProfileComponents.", FakeResponse(body=body))]
+    )
+    mobile = MobileAPITransport(session_factory=lambda acct: session)
+
+    result = await mobile.fetch_activity(_account(), "urn:li:fs_miniProfile:ACoA123")
+
+    assert result.success
+    assert result.detail["shape"] == "gql-contentCollections"
+    assert result.detail["posts"] == [{"urn": "urn:li:share:700", "text": "hello world"}]
+    # The member id is embedded as an fsd_profile URN, URL-encoded.
+    assert "profileUrn:urn%3Ali%3Afsd_profile%3AACoA123" in session.urls[0]
+
+
+async def test_fetch_activity_unavailable_when_all_shapes_fail():
+    session = FakeVoyagerSession([])
+    mobile = MobileAPITransport(session_factory=lambda acct: session)
+
+    with pytest.raises(TransportUnavailable) as excinfo:
+        await mobile.fetch_activity(_account(), "ACoA123")
+
+    assert "legacy-profileUpdatesV2" in str(excinfo.value)
+
+
 # --- Playwright executor adapter ---
 
 class FakeExecutor:

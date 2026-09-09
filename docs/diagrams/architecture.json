@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Social Bot — System Architecture",
+    "output": "architecture.html",
+    "quality_profile": "showcase",
+    "repository": { "url": "https://github.com/fundev-c/Social-Bot-LinkedIn-.git", "revision": "06a17e8c72269673f40779992525f851b9ccdcb3" },
+    "views": [
+      { "id": "review-loop", "label": "The review loop", "focus": ["operator", "frontend", "api", "suggest", "quality", "db"], "note": "Nothing reaches LinkedIn without passing through this path." },
+      { "id": "safety-gates", "label": "Safety gates", "focus": ["suggest", "quality", "warmup", "llm"], "note": "Every draft is scored, checked for repetition, and stage-gated before a human ever sees it." },
+      { "id": "sending", "label": "Sending, once approved", "focus": ["scheduler", "db", "linkedin"], "note": "Approved items sit in the database until the scheduler paces them out — it is off by default." }
+    ]
+  },
+  "components": [
+    { "id": "operator", "type": "external", "label": "Operator", "sublabel": "reviews & approves", "pos": [20, 320], "size": [120, 60] },
+    { "id": "frontend", "type": "frontend", "label": "Operator Dashboard", "sublabel": "React + Vite", "pos": [230, 320], "size": [140, 60], "sources": [{ "path": "frontend/src/pages/Approvals.tsx", "label": "Approvals page" }] },
+    { "id": "clerk", "type": "security", "label": "Clerk", "sublabel": "session JWT (JWKS)", "pos": [230, 100], "size": [140, 60], "sources": [{ "path": "src/api/middleware/clerk.py", "line": 1, "label": "Clerk verifier" }] },
+    { "id": "api", "type": "backend", "label": "FastAPI", "sublabel": "/api/v1", "pos": [440, 320], "size": [140, 60], "sources": [{ "path": "src/api/main.py", "line": 1, "label": "app entrypoint" }] },
+    { "id": "redis", "type": "messagebus", "label": "Redis", "sublabel": "rate limits, idempotency", "pos": [440, 100], "size": [140, 60], "sources": [{ "path": "src/infrastructure/rate_policy.py", "line": 1, "label": "AccountRateLimiter" }] },
+    { "id": "suggest", "type": "backend", "label": "Suggestion Engine", "sublabel": "score, draft, gate", "pos": [650, 320], "size": [160, 60], "sources": [{ "path": "src/outreach/suggest.py", "line": 58, "label": "generate_suggestions" }] },
+    { "id": "quality", "type": "backend", "label": "Quality Gate", "sublabel": "spam + repetition checks", "pos": [650, 100], "size": [160, 60], "sources": [{ "path": "src/outreach/quality.py", "line": 151, "label": "check_copy" }, { "path": "src/outreach/similarity.py", "line": 47, "label": "find_similar" }] },
+    { "id": "llm", "type": "external", "label": "OpenRouter", "sublabel": "draft copywriting", "pos": [860, 100], "size": [150, 60], "sources": [{ "path": "src/outreach/copy.py", "line": 1, "label": "copywriter" }] },
+    { "id": "warmup", "type": "backend", "label": "Warm-up Program", "sublabel": "6-stage ramp, per account", "pos": [860, 320], "size": [150, 60], "sources": [{ "path": "src/warmup/program.py", "line": 92, "label": "STAGES" }] },
+    { "id": "db", "type": "database", "label": "Postgres / SQLite", "sublabel": "targets, suggestions, accounts", "pos": [650, 540], "size": [160, 60], "sources": [{ "path": "src/database/session.py", "line": 1, "label": "engine" }] },
+    { "id": "scheduler", "type": "backend", "label": "Scheduler", "sublabel": "paced sends — off by default", "pos": [860, 540], "size": [150, 60], "sources": [{ "path": "src/scheduler/runner.py", "line": 1, "label": "scheduler runner" }] },
+    { "id": "linkedin", "type": "external", "label": "LinkedIn", "sublabel": "mobile API + fallback", "pos": [1070, 540], "size": [150, 60], "sources": [{ "path": "src/infrastructure/api_client.py", "line": 116, "label": "get_transport" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "FastAPI backend", "wraps": ["api", "suggest", "quality", "warmup", "scheduler"] },
+    { "kind": "security-group", "label": "auth-checked", "wraps": ["api", "clerk"] }
+  ],
+  "connections": [
+    { "id": "operator-frontend", "from": "operator", "to": "frontend", "label": "approve / skip", "variant": "emphasis" },
+    { "id": "frontend-api", "from": "frontend", "to": "api", "label": "HTTPS /api/v1", "variant": "emphasis", "labelDy": -20 },
+    { "id": "api-clerk", "from": "api", "to": "clerk", "label": "verify JWT", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "id": "api-redis", "from": "api", "to": "redis", "label": "rate limits", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelDx": 55 },
+    { "id": "api-suggest", "from": "api", "to": "suggest", "label": "generate queue", "labelAt": [615, 414] },
+    { "id": "suggest-quality", "from": "suggest", "to": "quality", "label": "score + flag repeats", "fromSide": "top", "toSide": "bottom" },
+    { "id": "quality-llm", "from": "quality", "to": "llm", "label": "draft the comment", "variant": "dashed", "labelAt": [835, 174] },
+    { "id": "suggest-warmup", "from": "suggest", "to": "warmup", "label": "is this unlocked?", "labelAt": [835, 414] },
+    { "id": "suggest-db", "from": "suggest", "to": "db", "label": "store pending", "fromSide": "bottom", "toSide": "top", "labelAt": [730, 414] },
+    { "id": "scheduler-db", "from": "scheduler", "to": "db", "label": "poll approved", "variant": "dashed", "labelAt": [835, 654] },
+    { "id": "scheduler-linkedin", "from": "scheduler", "to": "linkedin", "label": "send, paced", "variant": "dashed", "fromSide": "right", "toSide": "left" }
+  ],
+  "cards": [
+    { "dot": "violet", "title": "The review gate", "items": ["Nothing reaches LinkedIn without an explicit human approve", "Every draft is scored (quality) and cross-checked against the rest of the pending queue (repetition) before it's shown"] },
+    { "dot": "amber", "title": "Warm-up safety", "items": ["New accounts earn capability over ~21 days: observe -> react -> converse -> publish -> connect -> full", "An action not yet unlocked for the account's stage is impossible, not just rate-limited"] },
+    { "dot": "rose", "title": "Known gap", "items": ["The scheduler is off by default; approved items queue in the database but nothing sends until it's explicitly turned on", "Redis is optional — its absence degrades rate-limiting rather than blocking the app (see src/api/main.py)"] }
+  ]
+}

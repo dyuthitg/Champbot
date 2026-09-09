@@ -42,6 +42,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.accounts import caps as caps_policy
+from src.accounts.service import set_status
 from src.infrastructure.transports.base import TransportChallenge, TransportError
 from src.targeting.models import HUMAN_OWNED, OutreachTarget
 from src.warmup import planner, program
@@ -257,7 +258,7 @@ async def _perform_auto(
     except TransportChallenge as exc:
         from src.accounts.models import AccountStatus
 
-        account.status = AccountStatus.RATE_LIMITED
+        set_status(account, AccountStatus.RATE_LIMITED)
         await warmup_service.record(
             db, account, action, status=ActivityStatus.BLOCKED,
             subject_urn=subject, error=str(exc), commit=False,

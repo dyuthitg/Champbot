@@ -197,6 +197,14 @@ async def _run_account(
         except Exception as exc:
             _record_error(outcome, "send", exc)
 
+    # Persist the outcome onto the account itself, whether or not it had
+    # errors. Dry runs are a preview, not a real sweep, so they don't count as
+    # "the bot ran" for the purposes of the run-status view.
+    if not config.dry_run:
+        from src.accounts import service as accounts_service
+
+        await accounts_service.record_run_outcome(db, account, errors=outcome.errors)
+
     return outcome
 
 

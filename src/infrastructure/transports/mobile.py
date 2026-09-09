@@ -30,6 +30,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
+import urllib.parse
 from typing import Any, Optional, Tuple
 
 from src.infrastructure.transports.base import (
@@ -50,6 +52,20 @@ _BASE_HEADERS = {
     "x-li-lang": "en_US",
     "referer": "https://www.linkedin.com/feed/",
 }
+
+# Current-generation profile/activity reads are GraphQL-over-REST: each query is
+# addressed by ``<queryName>.<hash>`` where the hash pins a server-side query
+# version. These were captured from the live web client (2026-08); when LinkedIn
+# ships a new version the old hash starts failing (usually HTTP 400 or an empty
+# result) and these constants need re-capturing from a real session — see
+# docs/CONNECTING_AN_ACCOUNT.md ("Honest limits"). The legacy REST shapes below
+# are kept as same-transport fallbacks.
+GQL_PROFILE_RESOLVE_QUERY = (
+    "voyagerIdentityDashProfiles.b5c27c04968c409fc0ed3546575b9b7a"
+)
+GQL_PROFILE_COMPONENTS_QUERY = (
+    "voyagerIdentityDashProfileComponents.86824295e1093fb0f5acdd8d57213aaa"
+)
 
 
 def parse_auth_blob(auth_blob: Any) -> dict:
@@ -186,6 +202,14 @@ class MobileAPITransport:
         session = self.build_session(account)
         url = path if path.startswith("http") else f"{VOYAGER_BASE}{path}"
         kwargs.setdefault("timeout", self._timeout)
+        # Voyager never legitimately redirects a valid, authenticated session --
+        # a 3xx here means LinkedIn is bouncing the request to a login/checkpoint
+        # page instead. Following it blindly can bounce back and forth between
+        # those pages until curl_cffi's own redirect cap gives up, surfacing as an
+        # opaque "Maximum (30) redirects followed" network error instead of the
+        # auth problem it actually is. Stop at the first hop and treat it the same
+        # as a 401/403.
+        kwargs.setdefault("allow_redirects", False)
 
         def _do():
             return session.request(method, url, **kwargs)
@@ -202,6 +226,12 @@ class MobileAPITransport:
             )
         if status in (429, 999):
             raise TransportChallenge(f"rate limited by LinkedIn ({status})")
+        if 300 <= status < 400:
+            location = response.headers.get("location", "") if response.headers else ""
+            raise TransportChallenge(
+                f"session redirected ({status}) to {location or 'a login/checkpoint page'} "
+                "-- cookie is likely invalid, expired, or LinkedIn is showing a checkpoint"
+            )
 
         try:
             body = response.json()
@@ -279,29 +309,78 @@ class MobileAPITransport:
         )
 
     async def fetch_profile(self, account: Any, public_id: str) -> TransportResult:
-        """Resolve a public profile handle to its member URN and headline."""
-        status, body = await self._request(
-            account, "GET", f"/identity/profiles/{public_id}/profileView"
-        )
-        if not self._ok(status):
-            raise TransportUnavailable(f"fetch_profile returned HTTP {status}")
+        """
+        Resolve a profile handle (vanity slug or member id) to its URN and fields.
 
-        profile = (body or {}).get("profile") or {}
-        return TransportResult(
-            success=True,
-            action="fetch_profile",
-            via=self.name,
-            detail={
-                "member_urn": profile.get("entityUrn"),
-                "public_id": public_id,
-                "display_name": " ".join(
-                    filter(None, [profile.get("firstName"), profile.get("lastName")])
-                )
-                or None,
-                "headline": profile.get("headline"),
-                "location": (profile.get("geoLocationName") or profile.get("locationName")),
-                "industry": profile.get("industryName"),
-            },
+        The web client's current generation resolves handles through a GraphQL
+        query keyed by ``memberIdentity`` — the value must be sent *unquoted* in
+        the variables tuple, matching what the browser sends. That query returns
+        the ``fsd_profile`` URN plus whatever Profile entities the server chose
+        to inline. The legacy REST path is kept as a fallback; it now answers
+        410 for most sessions but costs one request to notice.
+        """
+        handle = _public_handle(public_id)
+        if not handle:
+            raise TransportUnavailable("fetch_profile needs a public id or profile URL")
+
+        errors = []
+
+        gql_path = (
+            "/graphql?includeWebMetadata=true"
+            f"&variables=(memberIdentity:{handle})"
+            f"&queryId={GQL_PROFILE_RESOLVE_QUERY}"
+        )
+        try:
+            status, body = await self._request(account, "GET", gql_path)
+        except TransportUnavailable as exc:
+            errors.append(f"gql-memberIdentity: {exc}")
+        else:
+            if self._ok(status):
+                detail = _parse_gql_profile(body, handle)
+                if detail.get("member_urn"):
+                    detail["shape"] = "gql-memberIdentity"
+                    return TransportResult(
+                        success=True,
+                        action="fetch_profile",
+                        via=self.name,
+                        detail=detail,
+                    )
+                errors.append("gql-memberIdentity: no profile URN in response")
+            else:
+                errors.append(f"gql-memberIdentity: HTTP {status}")
+
+        # Legacy REST shape (410s on most sessions now; cheap to confirm).
+        legacy_path = f"/identity/profiles/{handle}/profileView"
+        try:
+            status, body = await self._request(account, "GET", legacy_path)
+        except TransportUnavailable as exc:
+            errors.append(f"legacy-profileView: {exc}")
+        else:
+            if self._ok(status):
+                profile = (body or {}).get("profile") or {}
+                if profile.get("entityUrn"):
+                    return TransportResult(
+                        success=True,
+                        action="fetch_profile",
+                        via=self.name,
+                        detail={
+                            "shape": "legacy-profileView",
+                            "member_urn": profile.get("entityUrn"),
+                            "public_id": handle,
+                            "display_name": " ".join(
+                                filter(None, [profile.get("firstName"), profile.get("lastName")])
+                            )
+                            or None,
+                            "headline": profile.get("headline"),
+                            "location": (
+                                profile.get("geoLocationName") or profile.get("locationName")
+                            ),
+                            "industry": profile.get("industryName"),
+                        },
+                    )
+
+        raise TransportUnavailable(
+            f"fetch_profile failed on all voyager shapes: {'; '.join(errors)}"
         )
 
     # ------------------------------------------------------------------
@@ -456,20 +535,63 @@ class MobileAPITransport:
         )
 
     async def fetch_activity(self, account: Any, member_urn: str) -> TransportResult:
-        """Fetch a member's recent posts (the raw feed of things to engage with)."""
+        """
+        Fetch a member's recent posts (the raw feed of things to engage with).
+
+        Current generation: the profile page loads its content section through a
+        GraphQL ``ProfileComponents`` query with ``sectionType:content-collections``
+        — the same queryId hash the browser sends. Post entities, when the member
+        has any, arrive in the normalized envelope's ``included`` array. The
+        legacy ``profileUpdatesV2`` REST shape is kept as fallback.
+        """
         profile_id = _profile_id(member_urn)
-        status, body = await self._request(
-            account,
-            "GET",
-            f"/identity/profileUpdatesV2?profileUrn=urn%3Ali%3Afsd_profile%3A{profile_id}&count=10",
+        urn = urllib.parse.quote(f"urn:li:fsd_profile:{profile_id}", safe="")
+
+        errors = []
+
+        gql_path = (
+            "/graphql?includeWebMetadata=true"
+            f"&variables=(profileUrn:{urn},sectionType:content-collections)"
+            f"&queryId={GQL_PROFILE_COMPONENTS_QUERY}"
         )
-        if not self._ok(status):
-            raise TransportUnavailable(f"fetch_activity returned HTTP {status}")
-        return TransportResult(
-            success=True,
-            action="fetch_activity",
-            via=self.name,
-            detail={"posts": _extract_activities(body)},
+        try:
+            status, body = await self._request(account, "GET", gql_path)
+        except TransportUnavailable as exc:
+            errors.append(f"gql-contentCollections: {exc}")
+        else:
+            if self._ok(status):
+                posts = _extract_gql_posts(body)
+                return TransportResult(
+                    success=True,
+                    action="fetch_activity",
+                    via=self.name,
+                    detail={"shape": "gql-contentCollections", "posts": posts},
+                )
+            errors.append(f"gql-contentCollections: HTTP {status}")
+
+        legacy_path = (
+            "/identity/profileUpdatesV2"
+            f"?profileUrn=urn%3Ali%3Afsd_profile%3A{profile_id}&count=10"
+        )
+        try:
+            status, body = await self._request(account, "GET", legacy_path)
+        except TransportUnavailable as exc:
+            errors.append(f"legacy-profileUpdatesV2: {exc}")
+        else:
+            if self._ok(status):
+                return TransportResult(
+                    success=True,
+                    action="fetch_activity",
+                    via=self.name,
+                    detail={
+                        "shape": "legacy-profileUpdatesV2",
+                        "posts": _extract_activities(body),
+                    },
+                )
+            errors.append(f"legacy-profileUpdatesV2: HTTP {status}")
+
+        raise TransportUnavailable(
+            f"fetch_activity failed on all voyager shapes: {'; '.join(errors)}"
         )
 
     async def fetch_connections(self, account: Any, since: Any = None) -> TransportResult:
@@ -571,3 +693,92 @@ def _extract_activities(body: Any) -> list:
             text = text.get("text")
         posts.append({"urn": urn, "text": text})
     return posts
+
+
+def _public_handle(public_id: str) -> str:
+    """
+    Normalize any profile reference to the bare handle the API expects.
+
+    Accepts full URLs (``https://www.linkedin.com/in/<handle>/...``), bare
+    vanity slugs and raw member ids. Characters that would break the GraphQL
+    variables tuple are stripped rather than escaped — a handle containing them
+    is not a real handle anyway.
+    """
+    text = str(public_id or "").strip()
+    if "/" in text:
+        match = re.search(r"/in/([^/?#]+)", text)
+        if match:
+            text = match.group(1)
+        else:
+            text = text.rstrip("/").rsplit("/", 1)[-1]
+    return re.sub(r"[^A-Za-z0-9_\-]", "", text)
+
+
+def _parse_gql_profile(body: Any, handle: str) -> dict:
+    """
+    Parse the ``memberIdentity`` GraphQL response into fetch_profile detail.
+
+    The envelope carries the resolved URN under
+    ``data.data.identityDashProfilesByMemberIdentity`` and any inlined Profile
+    entities in ``included``. Name/headline fields are optional — the query's
+    projection has been observed to inline only the URN for some viewers.
+    """
+    detail: dict = {"member_urn": None, "public_id": handle}
+    if not isinstance(body, dict):
+        return detail
+
+    data_root = ((body.get("data") or {}).get("data") or {})
+    collection = data_root.get("identityDashProfilesByMemberIdentity") or {}
+    elements = collection.get("*elements") or collection.get("elements") or []
+    if isinstance(elements, list) and elements:
+        detail["member_urn"] = elements[0]
+
+    profile = next(
+        (
+            item
+            for item in body.get("included", []) or []
+            if isinstance(item, dict)
+            and str(item.get("$type", "")).endswith("identity.profile.Profile")
+            and (item.get("firstName") or item.get("headline"))
+        ),
+        None,
+    )
+    if profile:
+        detail["display_name"] = " ".join(
+            filter(None, [profile.get("firstName"), profile.get("lastName")])
+        ) or None
+        detail["headline"] = profile.get("headline")
+
+    return detail
+
+
+def _extract_gql_posts(body: Any) -> list:
+    """
+    Pull post summaries out of a normalized GraphQL envelope.
+
+    Post entities live in ``included``; they are recognized by type name
+    (dash ``Post``, legacy ``Update``) or by carrying commentary text. The
+    section component itself is deliberately skipped — it describes what content
+    types exist, not the content.
+    """
+    if not isinstance(body, dict):
+        return []
+    posts = []
+    for item in body.get("included", []) or []:
+        if not isinstance(item, dict):
+            continue
+        type_name = str(item.get("$type", ""))
+        is_post_like = (
+            type_name.endswith(".Post")
+            or ".Update" in type_name
+            or "commentary" in item
+        )
+        if not is_post_like:
+            continue
+        urn = item.get("entityUrn") or item.get("updateMetadata", {}).get("urn")
+        commentary = item.get("commentary") or {}
+        text = commentary.get("text") if isinstance(commentary, dict) else None
+        if isinstance(text, dict):
+            text = text.get("text")
+        posts.append({"urn": urn, "text": text})
+    return [p for p in posts if p.get("urn")]

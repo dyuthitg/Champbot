@@ -19,6 +19,7 @@ import type {
   PaginatedResponse,
   ScorePreview,
   Suggestion,
+  SuggestionPage,
   PreflightReport,
   Target,
   TargetImportItem,
@@ -260,11 +261,31 @@ export const outreachApi = {
     return data as GenerateResult;
   },
 
-  async list(accountId?: string, status = 'pending'): Promise<Suggestion[]> {
+  /** One page of the queue. Asking for 200 and hoping was the stopgap here
+   *  until 2026-09-04; at 400 pending, the rest were invisible and `total`
+   *  reported the page size, so nothing could even say how many were missing. */
+  async list(
+    accountId?: string,
+    status = 'pending',
+    { limit = 50, offset = 0 }: { limit?: number; offset?: number } = {},
+  ): Promise<SuggestionPage> {
     const { data } = await http.get('/outreach/suggestions', {
-      params: { account_id: accountId, status },
+      params: { account_id: accountId, status, limit, offset },
     });
-    return data.suggestions ?? [];
+    return {
+      suggestions: data.suggestions ?? [],
+      total: data.total ?? 0,
+      offset: data.offset ?? offset,
+      has_more: data.has_more ?? false,
+    };
+  },
+
+  /** Just the count for a status, for the queue's tab labels. */
+  async count(accountId: string | undefined, status: string): Promise<number> {
+    const { data } = await http.get('/outreach/suggestions', {
+      params: { account_id: accountId, status, limit: 1 },
+    });
+    return data.total ?? 0;
   },
 
   async approve(id: string, editedText?: string, sendAt?: string): Promise<Suggestion> {
@@ -275,8 +296,11 @@ export const outreachApi = {
     return data as Suggestion;
   },
 
-  async reject(id: string, suppressTarget = false): Promise<Suggestion> {
+  async reject(id: string, reason: string, suppressTarget = false): Promise<Suggestion> {
+    // reason is required by the backend now (RejectRequest.reason) -- it's
+    // the data that improves the prompt later, not optional metadata.
     const { data } = await http.post(`/outreach/suggestions/${id}/reject`, {
+      reason,
       suppress_target: suppressTarget,
     });
     return data as Suggestion;

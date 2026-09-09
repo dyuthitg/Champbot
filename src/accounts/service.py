@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -186,23 +187,23 @@ async def _verify_and_apply(
     try:
         result = await _transport_for(live, transport).whoami(live)
     except TransportError as exc:
-        record.status = AccountStatus.AUTH_REQUIRED
+        set_status(record, AccountStatus.AUTH_REQUIRED)
         _note(record, "verification_error", str(exc))
         logger.warning("Account %s failed verification: %s", record.id, exc)
         return
     except Exception as exc:  # unexpected: still don't lose the account
-        record.status = AccountStatus.ERROR
+        set_status(record, AccountStatus.ERROR)
         _note(record, "verification_error", str(exc))
         logger.exception("Account %s verification raised", record.id)
         return
 
     if not result.success:
-        record.status = AccountStatus.AUTH_REQUIRED
+        set_status(record, AccountStatus.AUTH_REQUIRED)
         _note(record, "verification_error", result.error or "whoami failed")
         return
 
     detail = result.detail or {}
-    record.status = AccountStatus.ACTIVE
+    set_status(record, AccountStatus.ACTIVE)
     record.linkedin_member_urn = detail.get("member_urn") or record.linkedin_member_urn
     record.profile_url = detail.get("profile_url") or record.profile_url
     record.headline = detail.get("headline") or record.headline
@@ -224,6 +225,44 @@ def _note(record: ConnectedAccount, key: str, value) -> None:
     record.daily_caps = caps
 
 
+def set_status(record: ConnectedAccount, new_status: str) -> None:
+    """
+    Change an account's status and stamp when it happened.
+
+    ``updated_at`` bumps on *any* write to the row, so it can't answer "how
+    long has this account been broken?" This stamp is the thing the run-status
+    view reads to say "session expired 2 hours ago" instead of guessing from a
+    column that moves for unrelated reasons.
+    """
+    if record.status != new_status:
+        record.status = new_status
+        _note(record, "status_changed_at", datetime.now(timezone.utc).isoformat())
+
+
+async def record_run_outcome(
+    db: AsyncSession, record: ConnectedAccount, *, errors: Optional[dict] = None
+) -> None:
+    """
+    Persist what happened the last time the scheduler touched this account.
+
+    Called once per account per tick, whether the tick succeeded or not — a
+    scheduler that goes quiet for days looks identical to one that is merely
+    idle unless every pass it makes leaves a mark. ``errors`` is the
+    ``AccountOutcome.errors`` dict from ``scheduler.tick``: at most one stage
+    fails loudest, so only the first is kept as the headline error.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    _note(record, "last_run_at", now_iso)
+    if errors:
+        stage, message = next(iter(errors.items()))
+        _note(record, "last_error", f"{stage}: {message}")
+        _note(record, "last_error_at", now_iso)
+        _note(record, "last_run_ok", False)
+    else:
+        _note(record, "last_run_ok", True)
+    await db.commit()
+
+
 async def update_account(
     db: AsyncSession, record: ConnectedAccount, payload
 ) -> ConnectedAccount:
@@ -236,7 +275,7 @@ async def update_account(
             raise AccountError(f"unknown mode: {payload.mode}")
         record.mode = payload.mode
     if payload.status is not None:
-        record.status = payload.status
+        set_status(record, payload.status)
     if payload.display_name is not None:
         record.display_name = payload.display_name
     if payload.active_icp_id is not None:
@@ -259,10 +298,8 @@ async def disconnect_account(db: AsyncSession, record: ConnectedAccount) -> None
     audit and suppression purposes; the credentials are hard-deleted because
     there is no reason to retain a bearer token past disconnection.
     """
-    from datetime import datetime, timezone
-
     record.auth_blob = None
-    record.status = AccountStatus.INACTIVE
+    set_status(record, AccountStatus.INACTIVE)
     record.deleted_at = datetime.now(timezone.utc)
     await db.commit()
 
@@ -273,7 +310,7 @@ async def check_health(
     """Re-verify a connected account's session right now."""
     live = LiveAccount(record, decrypt_auth(record.auth_blob))
     if not live.auth_blob:
-        record.status = AccountStatus.AUTH_REQUIRED
+        set_status(record, AccountStatus.AUTH_REQUIRED)
         await db.commit()
         return {
             "account_id": str(record.id),
@@ -285,7 +322,7 @@ async def check_health(
     try:
         result = await _transport_for(live, transport).whoami(live)
     except TransportError as exc:
-        record.status = AccountStatus.AUTH_REQUIRED
+        set_status(record, AccountStatus.AUTH_REQUIRED)
         await db.commit()
         return {
             "account_id": str(record.id),
@@ -294,7 +331,7 @@ async def check_health(
             "error": str(exc),
         }
 
-    record.status = AccountStatus.ACTIVE if result.success else AccountStatus.AUTH_REQUIRED
+    set_status(record, AccountStatus.ACTIVE if result.success else AccountStatus.AUTH_REQUIRED)
     await db.commit()
     return {
         "account_id": str(record.id),
@@ -325,4 +362,9 @@ def to_response(record: ConnectedAccount) -> AccountResponse:
         last_post_at=record.last_post_at,
         last_active_at=record.last_active_at,
         created_at=record.created_at,
+        status_since=meta.get("status_changed_at"),
+        last_run_at=meta.get("last_run_at"),
+        last_run_ok=meta.get("last_run_ok"),
+        last_error=meta.get("last_error"),
+        last_error_at=meta.get("last_error_at"),
     )

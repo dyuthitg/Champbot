@@ -32,6 +32,15 @@ CONNECT_NOTE_MAX = 300
 MESSAGE_MAX = 900
 MESSAGE_IDEAL_MAX = 600
 COMMENT_MAX = 400
+# The spec's own target for a comment (COMMENT_QUALITY_SPEC_V1.md, R2). It is
+# deliberately *not* the enforced limit: COMMENT_MAX above is the blocking cap
+# and the gap between the two is documented in COMMENT_RULES_ENFORCEMENT_GAP.md
+# ("only by proxy, and the proxy is ~2x looser"). The editor's live counter
+# turns amber at this number and red at COMMENT_MAX, so an operator can see
+# both the target and the wall.
+COMMENT_TARGET_CHARS = 280
+# R1: a comment should be 1-3 sentences.
+COMMENT_SENTENCE_MAX = 3
 
 # Phrases that mark copy as template-generated outreach. Recipients have seen
 # each of these a thousand times.
@@ -67,6 +76,56 @@ _TIRED_PHRASES = [
     "act now",
     "dear sir or madam",
     "to whom it may concern",
+    # Added 2026-09-04. COMMENT_QUALITY_SPEC_V1.md's R4 list has carried these
+    # since 2026-08-25, under "This week, no new logic: wire the extended R4
+    # banned-phrase list into _TIRED_PHRASES" -- and it never got wired. The
+    # first staging run of the full loop found out the hard way: three of the
+    # five comments the model wrote that morning opened with "You make a solid
+    # point" / "That's a solid insight", and R4 stayed silent on all three
+    # because the enforced list had never caught up with the written one.
+    #
+    # Two phrases the spec deliberately leaves OFF stay off: "it's interesting
+    # how" and "i've seen teams". The human audit never tagged either as a
+    # violation on its own, and one of the six good-graded comments uses the
+    # first outright. Frequency is not the bar; matching a named failure is.
+    "thanks for sharing",
+    "great insights",
+    "spot on",
+    "you make a solid point",
+    "you make a great point",
+    "you make a good point",
+    "you raise a good point",
+    "you raise a crucial point",
+    "you nailed it",
+    "you've nailed it",
+    "absolutely agree",
+    "that's a solid approach",
+    "that is a solid",
+    # Added 2026-09-08. The first staging run's "second opinion" check (the
+    # independent audit taxonomy in scripts/score_audit.py) approved-and-flagged
+    # "Interesting approach, Amaya." at 100/100 through this gate -- these two
+    # specific validation openers from that taxonomy's VALIDATE_OPENERS list
+    # were never wired in here, so the gate had nothing to catch them with.
+    "interesting approach",
+    "interesting results",
+    "that's a pivotal",
+    "that's a significant",
+]
+
+# Validation-opener phrases, checked separately from the scored list above:
+# whether a comment *opens* on one of these (regardless of scoring) is the
+# other half of the "3-beat bot template" the August audit named as its worst
+# failure mode (validate -> restate the thesis -> generic strategy question).
+# Mirrors scripts/score_audit.py's VALIDATE_OPENERS -- that script is the
+# reference taxonomy this gate is now held to. Deliberately excludes "it's
+# interesting" / "it is interesting" bare: the human audit never tagged either
+# as a violation on its own (see the _TIRED_PHRASES note above).
+_VALIDATION_OPENER_PHRASES = [
+    "you raise a good point", "you make a good point", "you make a great point",
+    "you make a solid point", "that's a solid", "that is a solid",
+    "great point", "good point", "you nailed it", "you've nailed it",
+    "spot on", "absolutely agree", "well said", "interesting approach",
+    "interesting results", "that's a pivotal", "that's a significant",
 ]
 
 # Asks that don't belong in a first touch, especially not a connection note.
@@ -104,6 +163,10 @@ _ALLOWED_CAPS = {
     "VP", "HR", "IT", "SEO", "CRM", "ERP", "ROI", "KPI", "OKR", "SDR", "AE",
     "UK", "US", "USA", "EU", "NHS", "GTM", "PLG", "LLM", "SQL", "AWS", "GCP",
     "IPO", "PE", "VC", "NPS", "ARR", "MRR", "QA", "UX", "UI", "PM",
+    # Added 2026-09-04 from the first staging run: the model wrote "NRR" --
+    # the metric our own ICP posts about -- and the gate called it shouting,
+    # while ARR and MRR two entries up were fine. Same vocabulary, same list.
+    "NRR", "LTV", "CAC", "ICP", "SEM", "PPC", "CSAT", "DAU", "MAU", "WAU",
 }
 
 # Generic openers that prove nothing about the recipient was read.
@@ -131,6 +194,189 @@ _GENERIC_HEADLINE_WORDS = {
 }
 
 
+# ----------------------------------------------------------------------
+# The rule vocabulary
+# ----------------------------------------------------------------------
+#
+# One name per rule, defined once, here. Everything downstream -- the chips in
+# the review queue, the failure-type filter, the PDF write-ups -- reads its
+# wording from this table, so a rule is called the same thing in the spec, in
+# the code, and on the operator's screen. Before this existed the gate emitted
+# free-text sentences ("Uses worn-out outreach phrasing: 'quick question'") and
+# the UI had no way to group two drafts that failed the same rule.
+#
+# ``spec_ref`` is the heading in COMMENT_QUALITY_SPEC_V1.md the rule comes
+# from, or ``None`` for a check that exists in this file but was never written
+# into the spec -- an honest gap, surfaced rather than quietly renamed.
+
+
+@dataclass(frozen=True)
+class Rule:
+    """One named guardrail: its short operator-facing label and where it came from."""
+
+    code: str
+    label: str
+    spec_ref: Optional[str] = None
+
+
+RULES: dict = {
+    r.code: r
+    for r in [
+        # --- Rules the comment spec numbers (COMMENT_QUALITY_SPEC_V1.md) ---
+        Rule("R1", "Too many sentences", "R1 - Length: 1 to 3 sentences"),
+        Rule("R2", "Too long", "R2 - Length: 280 characters"),
+        Rule("R3", "No specific reference", "R3 - Specificity"),
+        Rule("R4", "Generic phrase", "R4 - Banned phrases"),
+        Rule("R5", "Formula question", "R5 - The formulaic closing question"),
+        Rule("R6", "Emoji", "R6 - Emoji: zero"),
+        Rule("R7", "Too many exclamations", "R7 - Exclamation marks: at most one"),
+        # Spec item 8 lumps three different failures under one number. Split
+        # here because an operator filtering the queue needs them apart: a
+        # leaked merge field and a booking link are not the same mistake.
+        Rule("R8.1", "Placeholder left in", "Automatic reject 8 - placeholder"),
+        Rule("R8.2", "Link", "Automatic reject 8 - link"),
+        # --- Checks that live in this file but not (yet) in the spec ---
+        # Flagged as gaps on purpose: v2 of the spec should name these, and
+        # until it does, the chip says so rather than implying spec coverage.
+        Rule("LEN_SOFT", "Longer than ideal"),
+        Rule("THIN", "Too thin"),
+        Rule("CTA", "Asks for time up front"),
+        Rule("OPENER", "Generic opener"),
+        Rule("CAPS", "Shouting in caps"),
+        Rule("SELF", "All about us"),
+        Rule("EMPTY", "No draft"),
+        # Added 2026-09-08, closing the gap the first staging run's second
+        # opinion check found: a validation opener plus the formulaic closing
+        # question, together, is the "3-beat bot template" the August audit
+        # named as its worst failure mode and grades as a hard fail. R4 and R5
+        # alone only warn/advise; this is what actually stops that exact shape.
+        Rule("TEMPLATE3", "Formulaic 3-beat template"),
+        # Cross-queue, not per-draft: computed in src/outreach/similarity.py
+        # once the whole pending batch is loaded. It lives in this table
+        # anyway so the queue has one vocabulary, not two.
+        Rule("DUP", "Near-identical to others"),
+    ]
+}
+
+# Severity decides colour and whether the item can be approved at all.
+#   blocker  - cannot be approved or sent until rewritten
+#   warning  - deducts from the 0-100 score, shown to the reviewer
+#   advisory - shown only. Never touches the score or the pass/fail verdict.
+SEVERITIES = ("blocker", "warning", "advisory")
+
+
+@dataclass
+class QualityFlag:
+    """One rule, failed, on one piece of copy."""
+
+    code: str
+    label: str
+    severity: str
+    detail: str
+    spec_ref: Optional[str] = None
+
+    def as_dict(self) -> dict:
+        return {
+            "code": self.code,
+            "label": self.label,
+            "severity": self.severity,
+            "detail": self.detail,
+            "spec_ref": self.spec_ref,
+        }
+
+
+def flag(code: str, detail: str, severity: str = "warning") -> QualityFlag:
+    """Build a flag from the rule table, so wording is never retyped."""
+    rule = RULES[code]
+    return QualityFlag(
+        code=rule.code,
+        label=rule.label,
+        severity=severity,
+        detail=detail,
+        spec_ref=rule.spec_ref,
+    )
+
+
+def _normalize_quotes(text: str) -> str:
+    """
+    Typographic apostrophes/quotes -> straight ASCII ones.
+
+    An LLM writes "That's" with a curly '’', not a straight "'" -- every
+    phrase list in this file (_TIRED_PHRASES, _VALIDATION_OPENER_PHRASES,
+    _R5_STRATEGY_PHRASES, _R5_PRONOUNS) is written with straight ones, so
+    without this, any phrase containing an apostrophe silently never matches
+    real model output. Found via the first demo run against a live OpenRouter
+    draft: "That’s a solid insight..." followed by the exact formulaic
+    question shape scored 100/100 and passed clean, because '’' != "'".
+    """
+    return (text or "").replace("’", "'").replace("‘", "'")
+
+
+def count_sentences(text: str) -> int:
+    """
+    R1's test, exactly as the spec writes it: split on ``.``/``!``/``?``
+    boundaries and count the non-empty segments.
+    """
+    return len([part for part in re.split(r"[.!?]+", text or "") if part.strip()])
+
+
+# R5's test: a question containing a pronoun near one of these verbs *and* a
+# topic noun is the formulaic closing question -- the shape 43 of 58 audited
+# comments shared. Banning the shape holds where banning the wording does not.
+_R5_PRONOUNS = re.compile(r"\b(you|you've|you'd|your)\b", re.I)
+# The spec names five verbs: found, find, noticed, seen, tried. It named them
+# in one tense each, which is a wording slip rather than a decision -- "did you
+# notice any specific trends" is the same rule being broken as "have you noticed
+# any specific trends", and the first staging run produced exactly that sentence
+# and sailed through. Completing the inflections of the verbs the spec already
+# chose is finishing the rule as written. Adding *new* verbs, or new topic
+# nouns, would be chasing a dataset -- that stays a v2 item with real data
+# behind it, per R5's logged gap.
+_R5_VERBS = re.compile(
+    r"\b(found|find|finds|finding|notice|notices|noticed|noticing"
+    r"|see|sees|seen|seeing|try|tries|tried|trying)\b",
+    re.I,
+)
+_R5_TOPIC_NOUNS = re.compile(
+    r"\b(strateg\w*|approach\w*|tactic\w*|framework\w*|trend\w*|metric\w*)\b", re.I
+)
+
+# A second, literal detector for the same rule, mirroring
+# scripts/score_audit.py's STRATEGY_QUESTION list. The shape-based regex above
+# requires a topic noun near the verb, which the August audit's list does not
+# -- and that gap is exactly how "...have you found any particular user
+# feedback that led to other changes in the onboarding process?" passed this
+# gate at 100/100 in the first staging run while the audit taxonomy graded the
+# same comment "weak" ("feedback"/"changes" aren't in _R5_TOPIC_NOUNS). Both
+# detectors stay: the shape-based one catches paraphrases the audit's fixed
+# phrases don't, and the phrase list catches the literal wording the audit
+# taxonomy was built from.
+_R5_STRATEGY_PHRASES = [
+    "have you found", "what strategies have you", "any specific strategies",
+    "what specific strategies", "have you seen any specific",
+    "have you noticed any", "did you notice any", "what strategies",
+]
+
+
+def has_formulaic_question(text: str) -> bool:
+    """True if any question in ``text`` matches R5's pronoun+verb+topic shape,
+    or contains one of the audit's literal formulaic-question phrases."""
+    normalized = _normalize_quotes(text)
+    low = normalized.lower()
+    if any(p in low for p in _R5_STRATEGY_PHRASES):
+        return True
+    for sentence in re.split(r"(?<=[.!?])\s+", normalized):
+        if not sentence.strip().endswith("?"):
+            continue
+        if (
+            _R5_PRONOUNS.search(sentence)
+            and _R5_VERBS.search(sentence)
+            and _R5_TOPIC_NOUNS.search(sentence)
+        ):
+            return True
+    return False
+
+
 @dataclass
 class QualityReport:
     """Verdict on one piece of drafted copy."""
@@ -140,6 +386,11 @@ class QualityReport:
     blockers: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+    # The same findings as ``blockers``/``warnings``, plus advisory-only ones,
+    # each carrying the rule it broke. This is what the review queue renders
+    # as chips and filters by; the two string lists above stay exactly as they
+    # were so every existing caller keeps working.
+    flags: List[QualityFlag] = field(default_factory=list)
 
     def __bool__(self) -> bool:
         return self.passed
@@ -147,6 +398,10 @@ class QualityReport:
     @property
     def all_issues(self) -> List[str]:
         return self.blockers + self.warnings
+
+    @property
+    def flag_codes(self) -> List[str]:
+        return [f.code for f in self.flags]
 
 
 def _limit_for(action: str) -> int:
@@ -179,45 +434,86 @@ def check_copy(
     """
     blockers: List[str] = []
     warnings: List[str] = []
+    flags: List[QualityFlag] = []
     score = 100
+
+    def fail(code: str, message: str, severity: str = "warning") -> None:
+        """Record one finding once, in both shapes: the sentence humans read
+        and the named rule the queue groups and filters by."""
+        if severity == "blocker":
+            blockers.append(message)
+        elif severity == "warning":
+            warnings.append(message)
+        flags.append(flag(code, message, severity))
 
     body = (text or "").strip()
     if not body:
         return QualityReport(
-            score=0, passed=False, blockers=["Message is empty"], stats={"length": 0}
+            score=0,
+            passed=False,
+            blockers=["Message is empty"],
+            stats={"length": 0},
+            flags=[flag("EMPTY", "Message is empty", "blocker")],
         )
 
-    lowered = body.lower()
+    lowered = _normalize_quotes(body).lower()
     limit = _limit_for(action)
     words = body.split()
 
     # --- Length ---
     if len(body) > limit:
-        blockers.append(
-            f"Too long for a {action}: {len(body)} characters (limit {limit})"
+        fail(
+            "R2",
+            f"Too long for a {action}: {len(body)} characters (limit {limit})",
+            "blocker",
         )
     elif action == "message" and len(body) > MESSAGE_IDEAL_MAX:
-        warnings.append(f"Long for a first message ({len(body)} chars); shorter reads better")
+        fail("LEN_SOFT", f"Long for a first message ({len(body)} chars); shorter reads better")
         score -= 10
+    elif action == "comment" and len(body) > COMMENT_TARGET_CHARS:
+        # Over the spec's own R2 target but under the enforced cap. Advisory:
+        # the number that blocks is COMMENT_MAX, and pretending otherwise
+        # would reject copy the gate actually lets through.
+        fail(
+            "R2",
+            f"Over the {COMMENT_TARGET_CHARS}-character target for a comment ({len(body)} chars)",
+            "advisory",
+        )
 
     if len(words) < 8:
-        warnings.append("Very short — likely too thin to be worth sending")
+        fail("THIN", "Very short — likely too thin to be worth sending")
         score -= 15
+
+    # R1, comments only, advisory: sentence counting is new logic the
+    # enforcement audit assigned to whoever owns the shared gate, so it is
+    # shown and never enforced here. See COMMENT_RULES_ENFORCEMENT_GAP.md.
+    if action == "comment":
+        sentences = count_sentences(body)
+        if sentences > COMMENT_SENTENCE_MAX:
+            fail("R1", f"{sentences} sentences — the rule is 1 to 3", "advisory")
 
     # --- Unsubstituted placeholders: always a blocker ---
     placeholder = _PLACEHOLDER_PATTERN.search(body)
     if placeholder:
-        blockers.append(f"Contains an unfilled placeholder: '{placeholder.group(0)}'")
+        fail(
+            "R8.1",
+            f"Contains an unfilled placeholder: '{placeholder.group(0)}'",
+            "blocker",
+        )
 
     # --- Links ---
     has_calendar = bool(_CALENDAR_PATTERN.search(body))
     if has_calendar and not allow_scheduler_link:
-        blockers.append("Contains a booking link — never in a first touch")
+        fail("R8.2", "Contains a booking link — never in a first touch", "blocker")
     elif _LINK_PATTERN.search(body) and not (has_calendar and allow_scheduler_link):
         if action == "connect":
-            blockers.append("Contains a link — connection notes with links get reported")
+            fail(
+                "R8.2",
+                "Contains a link — connection notes with links get reported",
+                "blocker",
+            )
         elif not allow_scheduler_link:
-            warnings.append("Contains a link in a first message")
+            fail("R8.2", "Contains a link in a first message")
             score -= 20
 
     # --- Hard CTAs ---
@@ -227,22 +523,28 @@ def check_copy(
         for phrase in _HARD_CTA:
             if phrase in lowered:
                 if action == "connect":
-                    blockers.append(f"Pitches in a connection request: '{phrase}'")
+                    fail("CTA", f"Pitches in a connection request: '{phrase}'", "blocker")
                 else:
-                    warnings.append(f"Asks for time up front: '{phrase}'")
+                    fail("CTA", f"Asks for time up front: '{phrase}'")
                     score -= 15
                 break
 
     # --- Tired template phrases ---
     tired = [p for p in _TIRED_PHRASES if p in lowered]
     if tired:
-        warnings.append(f"Uses worn-out outreach phrasing: '{tired[0]}'")
+        fail("R4", f"Uses worn-out outreach phrasing: '{tired[0]}'")
         score -= 20 * min(len(tired), 3)
+
+    # Validation-opener check (combo detection only -- see TEMPLATE3 below).
+    # Not separately scored: most of these phrases are already in
+    # _TIRED_PHRASES and would double-count against the same R4 deduction
+    # above if scored again here.
+    opener_hit = any(p in lowered for p in _VALIDATION_OPENER_PHRASES)
 
     # --- Generic opener ---
     for opener in _GENERIC_OPENERS:
         if lowered.startswith(opener):
-            warnings.append(f"Generic opener '{opener}' — no sign the profile was read")
+            fail("OPENER", f"Generic opener '{opener}' — no sign the profile was read")
             score -= 30
             break
 
@@ -250,44 +552,83 @@ def check_copy(
     if target is not None:
         signals = _personalization_signals(lowered, target)
         if not signals:
-            warnings.append(
-                "No personal detail — this could have been sent to anyone"
-            )
+            fail("R3", "No personal detail — this could have been sent to anyone")
             score -= 25
     else:
         signals = []
 
     # --- Shouting and punctuation ---
-    shouty = [
-        w for w in words
-        if len(w) > 3 and w.isupper() and w.strip(".,!?") not in _ALLOWED_CAPS
-    ]
+    # Strip punctuation *before* both tests, not just the allow-list check.
+    # Found in the first staging run: "NRR?" was flagged as shouting while a
+    # bare "NRR" was not, because the length test ran on the unstripped token
+    # and a trailing question mark pushed a three-letter acronym over the
+    # limit. Whether an acronym is shouting cannot depend on where it lands in
+    # the sentence.
+    shouty = []
+    for word in words:
+        bare = word.strip(".,!?;:'\"")
+        if len(bare) > 3 and bare.isupper() and bare not in _ALLOWED_CAPS:
+            shouty.append(word)
     if shouty:
-        warnings.append(f"Shouting in caps: '{shouty[0]}'")
+        fail("CAPS", f"Shouting in caps: '{shouty[0]}'")
         score -= 15
 
     exclamations = body.count("!")
     if exclamations > 2:
-        warnings.append(f"{exclamations} exclamation marks reads as hype")
+        fail("R7", f"{exclamations} exclamation marks reads as hype")
         score -= 15
+    elif exclamations > 1:
+        # The spec's R7 is "at most one"; the enforced threshold is two. The
+        # gap is shown rather than closed here — closing it changes what gets
+        # rejected across connect and message too.
+        fail("R7", f"{exclamations} exclamation marks — the rule is at most one", "advisory")
     if "!!" in body:
-        warnings.append("Repeated exclamation marks")
+        fail("R7", "Repeated exclamation marks")
         score -= 10
 
     emoji_count = len(_EMOJI_PATTERN.findall(body))
     if emoji_count > 2:
-        warnings.append(f"{emoji_count} emoji is a lot for professional outreach")
+        fail("R6", f"{emoji_count} emoji is a lot for professional outreach")
         score -= 10
+    elif emoji_count:
+        # Same story as R7: the written rule is zero, the enforced number is
+        # two. Advisory until the shared threshold is signed off.
+        fail("R6", f"{emoji_count} emoji — the rule is none", "advisory")
 
     # --- "I/we" heavy copy: talking about yourself, not them ---
     self_refs = len(re.findall(r"\b(i|we|our|my|us)\b", lowered))
     you_refs = len(re.findall(r"\b(you|your|you're)\b", lowered))
     if self_refs > 0 and you_refs == 0:
-        warnings.append("Entirely about the sender — never mentions the recipient")
+        fail("SELF", "Entirely about the sender — never mentions the recipient")
         score -= 30
     elif self_refs >= 3 * max(you_refs, 1):
-        warnings.append("Heavily sender-focused ('I/we' far outweighs 'you')")
+        fail("SELF", "Heavily sender-focused ('I/we' far outweighs 'you')")
         score -= 15
+
+    # R5, comments only, advisory. This is the audit's headline failure --
+    # 43 of 58 comments ended in a version of "have you found any specific
+    # strategies" -- and the one rule the operator most needs to see. It is
+    # not enforced here for the same reason R1 is not: the gate is shared with
+    # connect and message, and tightening it is not a solo call.
+    if action == "comment" and has_formulaic_question(body):
+        if opener_hit:
+            # The full 3-beat template: validate, restate, then this exact
+            # question shape. The August audit calls this combination its
+            # damning case, and the first staging run proved why it has to be
+            # a blocker rather than advisory: R4 and R5 alone still summed to
+            # 100/100 on a comment the audit graded "weak".
+            fail(
+                "TEMPLATE3",
+                "Validates first, then closes on the formulaic 'have you found "
+                "any strategies' question — the 3-beat bot template",
+                "blocker",
+            )
+        else:
+            fail(
+                "R5",
+                "Ends on the formulaic 'have you found any strategies' question shape",
+                "advisory",
+            )
 
     score = max(0, min(100, score))
     passed = not blockers and score >= min_score
@@ -297,9 +638,11 @@ def check_copy(
         passed=passed,
         blockers=blockers,
         warnings=warnings,
+        flags=flags,
         stats={
             "length": len(body),
             "words": len(words),
+            "sentences": count_sentences(body),
             "personalization_signals": signals,
             "emoji": emoji_count,
         },
