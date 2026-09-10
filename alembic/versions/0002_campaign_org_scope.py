@@ -12,20 +12,21 @@ never recorded. The rule here:
 * If any organization exists, orphans are assigned to the **oldest** one. In
   every deployment so far that is the only organization, so this is exact rather
   than a guess.
-* If **no** organization exists, the migration **aborts**. There is no correct
-  owner to pick and this migration will not guess by destroying rows. The deploy
-  fails with the row count and the two ways forward, and the operator chooses.
+* If **no** organization exists, the migration used to abort outright — there is
+  no *real* tenant to guess as the owner, and this migration will still never
+  guess one. But an abort here is a deploy that fails on every boot until a
+  human runs a manual step against production, and the app never starts in the
+  meantime (2026-09-10: this is exactly what happened). So instead it creates
+  one explicitly-labeled **holding organization** ("Unassigned pre-tenancy
+  data...") and adopts the orphans into *that* — never a real tenant, never a
+  guess, and named so nobody mistakes it for one. Whoever finds it should
+  reassign those campaigns to their real owner and remove the holding org; nothing
+  here does that automatically, because that reassignment is a decision this
+  migration still can't make.
 
-This migration never deletes data. An aborted deploy is a conversation; a wrong
-delete is unrecoverable.
-
-**The check runs before any DDL, and that ordering is load-bearing.** SQLite has
-no transactional DDL (Alembic says as much in its log), so columns added before
-an abort survive the rollback and the re-run then fails on ``duplicate column
-name`` instead of succeeding — turning the documented recovery step into a dead
-end. Checking first makes the abort a genuine no-op on every backend. Postgres
-would have rolled it back cleanly; local development runs on SQLite, which is
-where this would have been found the hard way.
+This migration never deletes data, and it never invents an owner among *real*
+organizations. A wrong delete or a wrong real-tenant guess is unrecoverable; a
+holding organization is just a very visible TODO.
 
 At revision 0001 the ``org_id`` column does not exist yet, so every campaign
 present is by definition unowned — the pre-check counts rows in ``campaigns``,
@@ -38,6 +39,7 @@ Revision ID: 0002
 Revises: 0001
 """
 
+import uuid
 from typing import Sequence, Union
 
 from alembic import op
@@ -52,9 +54,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # 1. Decide whether this can succeed *before* changing the schema, so an
-    #    abort leaves the database untouched on backends without transactional
-    #    DDL. See the module docstring — this ordering is not cosmetic.
+    # 1. Decide who owns any orphaned rows *before* changing the schema, so a
+    #    holding-org insert (or, on an already-owned database, no insert at
+    #    all) is the only write that happens before the DDL below.
     #    org_id does not exist yet, so every campaign here is unowned.
     orphans = conn.execute(sa.text("SELECT COUNT(*) FROM campaigns")).scalar_one()
     owner = None
@@ -65,22 +67,27 @@ def upgrade() -> None:
         ).scalar_one_or_none()
 
         if owner is None:
-            raise RuntimeError(
-                f"[0002] cannot migrate: {orphans} campaign(s) have no owning "
-                "organization and no organization exists to adopt them.\n"
-                "\n"
-                "campaigns.org_id is NOT NULL, and this migration will not guess an "
-                "owner by deleting rows. Nothing has been changed. Choose one:\n"
-                "\n"
-                "  1. Create the organization that should own them, then re-deploy. "
-                "The oldest organization will adopt them automatically.\n"
-                "  2. If they are pre-tenancy test data nobody needs, remove them "
-                "deliberately and re-deploy:\n"
-                "       DELETE FROM campaigns;\n"
-                "     Unqualified on purpose: org_id does not exist yet at this "
-                "revision, so every campaign in the table is one of these rows.\n"
-                "\n"
-                "Inspect them first: SELECT id, name, created_at FROM campaigns;"
+            # No real tenant to adopt these into, and this migration still will
+            # not guess one. Park them in an explicit, unmistakably-fake holding
+            # organization instead of blocking every future boot on a manual SQL
+            # step against production -- see the module docstring.
+            owner = str(uuid.uuid4())
+            conn.execute(
+                sa.text(
+                    "INSERT INTO organizations (id, name, plan, settings, created_at, updated_at)"
+                    " VALUES (:id, :name, 'free', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ),
+                {
+                    "id": owner,
+                    "name": "Unassigned pre-tenancy data (auto-created by migration 0002)",
+                },
+            )
+            print(
+                f"[0002] no organization existed to adopt {orphans} pre-tenancy "
+                f"campaign(s); created holding organization {owner} for them. "
+                "Reassign these campaigns to their real owner, then rename or "
+                "remove that organization -- this migration will not do that "
+                "part for you."
             )
 
     # 2. Safe to proceed. Add both columns nullable so existing rows survive the

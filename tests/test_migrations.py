@@ -129,69 +129,58 @@ def test_backfill_adopts_orphans_into_the_existing_org(db_path, sync_engine):
     assert str(rows[0].org_id) == str(org_id)
 
 
-def test_backfill_aborts_when_no_org_can_own_the_orphans(db_path, sync_engine):
+def test_backfill_creates_a_holding_org_when_none_exists(db_path, sync_engine):
     """
-    With no organization at all, the migration refuses to run and keeps the row.
+    With no organization at all, the migration no longer aborts.
 
-    0002 is non-destructive by decision: there is no correct owner to pick, so it
-    fails the deploy and lets a human choose rather than deleting data. Asserted
-    here so a later edit cannot quietly turn this back into a DELETE.
+    2026-09-10: an abort here meant the app crashed on every boot until a human
+    ran a manual SQL step against production — the healthcheck never got a
+    response and the deploy never came up. 0002 still refuses to guess a *real*
+    tenant (see test_backfill_adopts_orphans_into_the_existing_org for that
+    case, unchanged), but with none available it now creates one clearly-labeled
+    holding organization and finishes the deploy, rather than blocking it.
     """
     config = alembic_config(db_path)
     command.upgrade(config, "0001")
     _seed_pre_tenancy_campaign(sync_engine, with_org=False)
 
-    with pytest.raises(RuntimeError, match="no organization exists to adopt them"):
-        command.upgrade(config, "0002")
+    command.upgrade(config, "0002")  # must not raise
 
-    # The abort must leave the campaign intact, not half-migrated.
     with sync_engine.connect() as conn:
-        count = conn.execute(sa.text("SELECT COUNT(*) FROM campaigns")).scalar_one()
-        version = conn.execute(
-            sa.text("SELECT version_num FROM alembic_version")
-        ).scalar_one()
+        rows = conn.execute(sa.text("SELECT name, org_id FROM campaigns")).fetchall()
+        version = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
+        orgs = conn.execute(sa.text("SELECT id, name FROM organizations")).fetchall()
 
-    assert count == 1, "the campaign must survive an aborted migration"
-    assert version == "0001", "a failed 0002 must not be recorded as applied"
+    assert version == "0002", "the migration must complete, not stay half-applied"
+    assert len(rows) == 1, "the campaign must survive"
+    assert rows[0].org_id is not None
 
-    # And it must leave the *schema* untouched, not just the rows. SQLite has no
-    # transactional DDL, so a column added before the abort would survive the
-    # rollback and make the re-run below fail on "duplicate column name" —
-    # exactly the dead end this ordering exists to prevent.
-    columns = {c["name"] for c in sa.inspect(sync_engine).get_columns("campaigns")}
-    assert "org_id" not in columns, "the abort must happen before any DDL is applied"
-    assert "created_by_user_id" not in columns
+    # Exactly one org exists, it owns the orphan, and its name makes it
+    # unmistakable that this is not a real tenant.
+    assert len(orgs) == 1
+    assert str(orgs[0].id) == str(rows[0].org_id)
+    assert "auto-created" in orgs[0].name.lower()
+    assert "unassigned" in orgs[0].name.lower()
 
 
-def test_upgrade_succeeds_once_an_org_exists_to_adopt_them(db_path, sync_engine):
+def test_backfill_never_adopts_into_an_existing_real_org_by_accident(db_path, sync_engine):
     """
-    The documented recovery path works: create an org, re-run, orphans adopted.
+    The holding-org fallback only ever fires when *zero* organizations exist.
 
-    This is the instruction the abort message gives the operator, so it is worth
-    proving rather than assuming.
+    If even one real organization is present, orphans must still go to it (the
+    existing, unchanged behavior) rather than into a new holding org — the
+    fallback is for the "nothing to adopt into" case only, never a substitute
+    for the oldest-org rule.
     """
     config = alembic_config(db_path)
     command.upgrade(config, "0001")
-    _seed_pre_tenancy_campaign(sync_engine, with_org=False)
-
-    with pytest.raises(RuntimeError):
-        command.upgrade(config, "0002")
-
-    # Recovery: the operator creates the owning organization and re-deploys.
-    org_id = uuid.uuid4()
-    with sync_engine.begin() as conn:
-        conn.execute(
-            sa.text(
-                "INSERT INTO organizations (id, name, plan, settings, created_at, updated_at)"
-                " VALUES (:id, 'Acme', 'free', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-            ),
-            {"id": str(org_id)},
-        )
+    org_id = _seed_pre_tenancy_campaign(sync_engine, with_org=True)
 
     command.upgrade(config, "0002")
 
     with sync_engine.connect() as conn:
-        rows = conn.execute(sa.text("SELECT name, org_id FROM campaigns")).fetchall()
+        rows = conn.execute(sa.text("SELECT org_id FROM campaigns")).fetchall()
+        org_count = conn.execute(sa.text("SELECT COUNT(*) FROM organizations")).scalar_one()
 
-    assert len(rows) == 1
+    assert org_count == 1, "no holding org should be created when a real one exists"
     assert str(rows[0].org_id) == str(org_id)
