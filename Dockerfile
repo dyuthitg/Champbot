@@ -3,6 +3,16 @@
 # Stage 1: build the frontend
 FROM node:22-slim AS frontend
 WORKDIR /app/frontend
+# Vite bakes import.meta.env.VITE_* in at build time, not read at runtime --
+# a Railway *service variable* named VITE_CLERK_PUBLISHABLE_KEY does nothing
+# on its own, because this build stage never saw it. Railway auto-forwards
+# service variables as Docker build args for a Dockerfile builder, but only
+# for ARGs a Dockerfile actually declares, which is why these two lines are
+# the entire fix: without them the SPA silently built in demo mode -- no
+# sign-in screen, no auth token ever attached, every API call 401ing behind
+# an otherwise-normal-looking empty dashboard. Found live 2026-09-10.
+ARG VITE_CLERK_PUBLISHABLE_KEY
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 COPY frontend/package.json ./
 # npm install (not ci): the lock file is excluded from the Docker context.
 RUN npm install --no-audit --no-fund
