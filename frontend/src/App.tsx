@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Account } from './pages/Account';
 import { Accounts } from './pages/Accounts';
 import { AgentMonitor } from './pages/AgentMonitor';
 import { Approvals } from './pages/Approvals';
@@ -50,6 +51,7 @@ function AnimatedRoutes() {
         <Route path="/campaigns" element={<Page><CampaignList /></Page>} />
         <Route path="/campaigns/new" element={<Page><CreateCampaign /></Page>} />
         <Route path="/agents" element={<Page><AgentMonitor /></Page>} />
+        <Route path="/account" element={<Page><Account /></Page>} />
         {/* Catch-all redirect */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

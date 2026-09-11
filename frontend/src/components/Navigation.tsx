@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Activity, Flame, Inbox, LayoutDashboard, Target, Users } from 'lucide-react';
+import { Activity, Flame, Inbox, LayoutDashboard, Target, User, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { outreachApi } from '@/lib/api';
 
@@ -12,6 +12,7 @@ const navItems = [
   { path: '/targeting', label: 'Targeting', icon: Target },
   { path: '/accounts', label: 'Accounts', icon: Users },
   { path: '/agents', label: 'Agents', icon: Activity },
+  { path: '/account', label: 'Account', icon: User },
 ];
 
 export function Navigation() {
