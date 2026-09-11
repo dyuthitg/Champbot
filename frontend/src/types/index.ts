@@ -216,12 +216,19 @@ export interface ICP {
   company_sizes: string[];
   value_proposition?: string;
   instructions?: string;
+  brand_voice_id?: string | null;
   relevance_floor: number;
   is_active: boolean;
   created_at?: string;
 }
 
 export type ICPPayload = Omit<ICP, 'id' | 'org_id' | 'is_active' | 'created_at'>;
+
+export interface BrandVoiceSummary {
+  id: string;
+  brand_name: string;
+  formality: 'casual' | 'conversational' | 'formal';
+}
 
 export type TargetStatus =
   | 'new'

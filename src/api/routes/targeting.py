@@ -18,8 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.accounts import service as accounts_service
 from src.api.middleware.clerk import RequestContext, get_request_context
 from src.database.session import get_db
+from src.outreach import brand_voice as brand_voice_module
 from src.targeting import service as targeting_service
 from src.targeting.schemas import (
+    BrandVoiceSummary,
     ICPCreate,
     ICPResponse,
     ICPUpdate,
@@ -33,6 +35,25 @@ from src.targeting.schemas import (
 from src.targeting.scoring import score_target
 
 router = APIRouter(prefix="/targeting", tags=["targeting"])
+
+
+# ----------------------------------------------------------------------
+# Brand voice
+# ----------------------------------------------------------------------
+
+
+@router.get("/brand-voices", response_model=list[BrandVoiceSummary])
+async def list_brand_voices() -> list[BrandVoiceSummary]:
+    """
+    Every brand voice a marketer has dropped into config/brand_voices/.
+
+    Not backed by the database -- these are files, on purpose, so adding one
+    never requires a migration or a deploy. See that folder's README.md.
+    """
+    return [
+        BrandVoiceSummary(id=p.id, brand_name=p.brand_name, formality=p.formality)
+        for p in brand_voice_module.list_profiles()
+    ]
 
 
 # ----------------------------------------------------------------------

@@ -1,0 +1,47 @@
+# Lake B2B -- enterprise data & lead-gen brand. Formal, precise, no fluff.
+# See README.md for what every field means.
+
+id: lake-b2b
+brand_name: Lake B2B
+
+formality: formal
+max_sentences: 2
+emoji_frequency: never
+
+banned_phrases:
+  - game-changer
+  - synergy
+  - unlock growth
+  - supercharge
+  - revolutionize
+  - circle back
+  - touch base
+  - at the end of the day
+  - move the needle
+
+preferred_phrases:
+  - clean data
+  - pipeline accuracy
+  - signal, not noise
+
+tone_words:
+  - precise
+  - data-driven
+  - no-fluff
+  - credible
+
+cta_style: soft_question
+signoff: none
+
+notes: >
+  Never name a competitor. Never quote a price, a contract term, or a
+  specific customer name. If the post includes a number, engage with the
+  number directly rather than praising the post in general terms.
+
+example_comments:
+  - post_context: "A VP of Marketing posted that their intent-data vendor returned 40% duplicate contacts last quarter."
+    comment: "40% duplicates points at a hygiene problem upstream, not the vendor itself -- worth checking how the source list was deduped before switching providers."
+  - post_context: "A RevOps lead shared that SDRs spend about 6 hours a week manually verifying contact data."
+    comment: "Six hours a week per rep is close to a full day a month lost to manual verification. That usually traces back to sourcing, not process."
+  - post_context: "A CMO announced hitting the quarter's pipeline target three weeks early."
+    comment: "Hitting it early almost always means the targeting criteria were tighter than usual, not that more volume went out. Worth writing down what changed this quarter."

@@ -1,0 +1,77 @@
+# -----------------------------------------------------------------------
+# Copy this file, rename it, fill it in. That's the whole job.
+#
+# 1. Copy this file to a new name, e.g. acme-corp.yaml
+# 2. Set `id:` below to match that filename exactly (acme-corp, no .yaml)
+# 3. Fill in every line marked REQUIRED. The rest are optional -- delete
+#    them if you don't need them, or leave them as they are.
+# 4. Save it in this same folder. No deploy, no code, no engineer needed --
+#    it shows up in the "Brand voice" dropdown next to any target profile
+#    the next time someone opens that screen.
+#
+# See README.md in this folder for what each field actually does, with
+# examples of two very different brands (Lake B2B and Loopwork) already
+# filled in for reference.
+# -----------------------------------------------------------------------
+
+# REQUIRED. Must match this file's name exactly (no .yaml, all lowercase,
+# words separated by a hyphen). This is the internal ID -- brand_name below
+# is what people actually see.
+id: your-brand-id
+
+# REQUIRED. The name shown in the app.
+brand_name: Your Brand Name
+
+# REQUIRED. One of: casual | conversational | formal
+# casual        - like a friendly peer, not a company account
+# conversational- like one knowledgeable professional talking to another
+# formal        - restrained, precise, no slang
+formality: conversational
+
+# REQUIRED. The hard cap on sentences per comment. 1 or 2 is usually right
+# for a LinkedIn comment -- longer starts to read like a mini-essay.
+max_sentences: 2
+
+# REQUIRED. One of: never | rare | occasional
+emoji_frequency: never
+
+# REQUIRED. Words or phrases this brand should never write. Add as many as
+# you want, one per line starting with a dash. Case doesn't matter.
+banned_phrases:
+  - game-changer
+  - synergy
+  - circle back
+
+# OPTIONAL. Words or phrases that sound like this brand -- used only where
+# they fit naturally, never forced into every comment. Delete this whole
+# block if you don't have any.
+preferred_phrases: []
+
+# OPTIONAL. 2-5 words describing the voice -- helps more than you'd think.
+tone_words: []
+
+# OPTIONAL. How a comment is allowed to end.
+# none          - never ends with a question
+# soft_question - a light, genuine question is fine
+# direct_ask    - ending with a direct, specific question is encouraged
+# Defaults to soft_question if you delete this line.
+cta_style: soft_question
+
+# OPTIONAL. Whether to use the person's first name.
+# none | first_name_only
+# Defaults to none if you delete this line.
+signoff: none
+
+# OPTIONAL. Anything else, in your own words. One sentence is fine, a
+# paragraph is fine too.
+notes: ""
+
+# REQUIRED. At least 2 real examples in this brand's voice. Write these
+# yourself -- the more they actually sound like the brand, the better every
+# comment this profile produces will sound. `post_context` is just a
+# one-line description of what the example is replying to.
+example_comments:
+  - post_context: "Describe the kind of post this is replying to"
+    comment: "Write the example comment exactly the way this brand would say it."
+  - post_context: "A second, different kind of post"
+    comment: "A second example, different enough from the first to show range."

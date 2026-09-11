@@ -28,6 +28,11 @@ class ICPBase(BaseModel):
         description="Standing direction for the copywriter, e.g. 'never pitch "
         "in a first message', 'mention we're both in the RevOps group'",
     )
+    brand_voice_id: Optional[str] = Field(
+        None,
+        description="Which brand voice profile (config/brand_voices/*.yaml) to "
+        "write in. Null uses the product's default voice.",
+    )
     relevance_floor: int = Field(
         default=60, ge=0, le=100, description="Suggestions below this score are never shown"
     )
@@ -53,6 +58,7 @@ class ICPUpdate(BaseModel):
     company_sizes: Optional[List[str]] = None
     value_proposition: Optional[str] = None
     instructions: Optional[str] = None
+    brand_voice_id: Optional[str] = None
     relevance_floor: Optional[int] = Field(None, ge=0, le=100)
     is_active: Optional[bool] = None
 
@@ -65,6 +71,15 @@ class ICPResponse(ICPBase):
     account_id: Optional[str] = None
     is_active: bool = True
     created_at: Optional[datetime] = None
+
+
+class BrandVoiceSummary(BaseModel):
+    """One brand voice profile, as shown in the picker. Not a database row --
+    read straight off config/brand_voices/*.yaml."""
+
+    id: str
+    brand_name: str
+    formality: str
 
 
 class TargetImportItem(BaseModel):

@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 import { Check, Loader2, Plus, Target as TargetIcon, Upload, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { accountApi, targetingApi } from '@/lib/api';
-import type { ICP, ScorePreview, TargetImportItem } from '@/types';
+import type { BrandVoiceSummary, ICP, ScorePreview, TargetImportItem } from '@/types';
 
 const BLANK = {
   name: '',
@@ -24,6 +24,7 @@ const BLANK = {
   company_sizes: [] as string[],
   value_proposition: '',
   instructions: '',
+  brand_voice_id: null as string | null,
   relevance_floor: 60,
 };
 
@@ -39,6 +40,12 @@ export function Targeting() {
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
     queryFn: accountApi.list,
+  });
+  // The brand voice picker: files under config/brand_voices/, not database
+  // rows — a marketer adding one shows up here on next load, no deploy.
+  const { data: brandVoices = [] } = useQuery({
+    queryKey: ['brand-voices'],
+    queryFn: targetingApi.listBrandVoices,
   });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['icps'] });
@@ -73,6 +80,7 @@ export function Targeting() {
           onSave={() => save.mutate(editing)}
           onCancel={() => setEditing(null)}
           saving={save.isPending}
+          brandVoices={brandVoices}
         />
       )}
 
@@ -119,12 +127,14 @@ function ICPEditor({
   onSave,
   onCancel,
   saving,
+  brandVoices,
 }: {
   value: typeof BLANK;
   onChange: (next: typeof BLANK) => void;
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
+  brandVoices: BrandVoiceSummary[];
 }) {
   const set = (patch: Partial<typeof BLANK>) => onChange({ ...value, ...patch });
 
@@ -210,6 +220,26 @@ function ICPEditor({
         </label>
 
         <label className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-xs text-slate-400">Brand voice</span>
+          <select
+            value={value.brand_voice_id ?? ''}
+            onChange={(e) => set({ brand_voice_id: e.target.value || null })}
+            className="select"
+          >
+            <option value="">Default — plain, brand-neutral voice</option>
+            {brandVoices.map((voice) => (
+              <option key={voice.id} value={voice.id}>
+                {voice.brand_name} ({voice.formality})
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-slate-500">
+            Defined in config/brand_voices/ — a marketer adds a new one there, no
+            engineer needed. It shapes tone only; the safety rules above always apply.
+          </span>
+        </label>
+
+        <label className="flex flex-col gap-1 sm:col-span-2">
           <span className="text-xs text-slate-400">
             Only suggest people scoring at least{' '}
             <span className="text-slate-200 font-medium">{value.relevance_floor}</span>
@@ -222,7 +252,7 @@ function ICPEditor({
             step={5}
             value={value.relevance_floor}
             onChange={(e) => set({ relevance_floor: Number(e.target.value) })}
-            className="accent-purple-500"
+            className="accent-accent"
           />
           <span className="text-xs text-slate-500">
             Higher means fewer, better-fitting people.

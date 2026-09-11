@@ -84,6 +84,12 @@ class ICPProfile(Base):
     # pitch in the first message"). Fed verbatim into the copywriter.
     instructions: Mapped[Optional[str]] = mapped_column(Text)
 
+    # Which brand voice (src/outreach/brand_voice.py, config/brand_voices/*.yaml)
+    # to write in. Not a foreign key -- profiles live as files, not rows, so a
+    # marketer can add one without touching the database. Null means the
+    # product's default, brand-neutral voice.
+    brand_voice_id: Mapped[Optional[str]] = mapped_column(String(64))
+
     # Suggestions below this score are never shown.
     relevance_floor: Mapped[int] = mapped_column(Integer, default=60)
 

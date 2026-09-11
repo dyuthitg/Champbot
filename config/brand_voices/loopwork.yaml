@@ -1,0 +1,47 @@
+# Loopwork -- async-first project tool for remote teams. Casual, warm,
+# a little funny. Deliberately built to be the opposite of Lake B2B, to
+# prove the same schema covers both ends of the range.
+# See README.md for what every field means.
+
+id: loopwork
+brand_name: Loopwork
+
+formality: casual
+max_sentences: 1
+emoji_frequency: occasional
+
+banned_phrases:
+  - synergy
+  - leverage
+  - circle back
+  - deep dive
+  - move the needle
+  - low-hanging fruit
+  - touch base
+
+preferred_phrases:
+  - ship it
+  - async
+  - no meetings
+
+tone_words:
+  - warm
+  - blunt
+  - human
+  - funny without trying too hard
+
+cta_style: direct_ask
+signoff: first_name_only
+
+notes: >
+  One emoji per comment at most, and only if it's actually funny -- never
+  decorative. It's fine to be a little irreverent about corporate norms
+  (meetings, standups, "alignment") as long as it never reads as mean.
+
+example_comments:
+  - post_context: "A founder posted about cancelling all recurring meetings for a month."
+    comment: "Priya, a month with zero recurring meetings sounds like a horror movie for middle management and a dream for literally everyone else 😅"
+  - post_context: "An engineering manager shared that their team shipped a feature in 3 days instead of the planned 2 weeks."
+    comment: "3 days instead of 2 weeks -- what actually got cut, the scope or the standups?"
+  - post_context: "A remote-team lead posted about switching from Slack threads to async video updates."
+    comment: "Sam, genuinely curious if anyone watches those at 2x speed or if that's just me."

@@ -48,6 +48,7 @@ async def create_icp(db: AsyncSession, org_id: str, payload) -> ICPProfile:
         name=payload.name,
         value_proposition=payload.value_proposition,
         instructions=payload.instructions,
+        brand_voice_id=payload.brand_voice_id,
         relevance_floor=payload.relevance_floor,
     )
     for field in _ICP_LIST_FIELDS:
@@ -237,6 +238,7 @@ def icp_to_response(icp: ICPProfile) -> ICPResponse:
         company_sizes=icp.company_sizes or [],
         value_proposition=icp.value_proposition,
         instructions=icp.instructions,
+        brand_voice_id=icp.brand_voice_id,
         relevance_floor=icp.relevance_floor,
         is_active=icp.is_active,
         created_at=icp.created_at,

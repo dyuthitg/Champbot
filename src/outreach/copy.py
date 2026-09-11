@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Any, List, Optional
 
 from src.infrastructure.llm.provider import LLMProvider, OpenRouterConfig, Slot
+from src.outreach import brand_voice as brand_voice_module
 from src.outreach.quality import QualityReport, check_copy
 
 logger = logging.getLogger(__name__)
@@ -161,6 +162,15 @@ def build_messages(action: str, target: Any, account: Any, icp: Any) -> List[dic
         system += (
             "\n\nAdditional standing instructions from the account owner — these "
             f"override the defaults above where they conflict:\n{instructions}"
+        )
+
+    brand_voice = brand_voice_module.load_profile(_get(icp, "brand_voice_id"))
+    if brand_voice:
+        system += (
+            "\n\nBrand voice for this account — layer this tone on top of "
+            "everything above. It shapes *how* this is said; it never "
+            "overrides the safety rules (no invented facts, no links, no "
+            "pitching):\n" + brand_voice_module.render_style_rules(brand_voice)
         )
 
     user = (

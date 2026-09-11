@@ -9,6 +9,7 @@ import type {
   AccountConnectPayload,
   ActivityItem,
   Agent,
+  BrandVoiceSummary,
   Campaign,
   CampaignCreate,
   ConnectedAccount,
@@ -196,6 +197,11 @@ export const targetingApi = {
   async listIcps(): Promise<ICP[]> {
     const { data } = await http.get('/targeting/icps');
     return data as ICP[];
+  },
+
+  async listBrandVoices(): Promise<BrandVoiceSummary[]> {
+    const { data } = await http.get('/targeting/brand-voices');
+    return data as BrandVoiceSummary[];
   },
 
   async createIcp(payload: Partial<ICPPayload> & { name: string }): Promise<ICP> {

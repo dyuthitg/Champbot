@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Brand Voice Profile",
+  "description": "One brand's writing voice, as data. A marketer fills this in -- no code, no engineer -- and it becomes selectable wherever a target profile (ICP) is configured. src/outreach/brand_voice.py is the only code that reads this file.",
+  "type": "object",
+  "required": [
+    "id",
+    "brand_name",
+    "formality",
+    "max_sentences",
+    "emoji_frequency",
+    "banned_phrases",
+    "example_comments"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Must exactly match the filename (without .yaml). Lowercase, words separated by a hyphen. This is what an ICP's brand_voice_id points at.",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "brand_name": {
+      "type": "string",
+      "description": "The name shown in the picker in the app, e.g. 'Lake B2B'."
+    },
+    "formality": {
+      "type": "string",
+      "description": "How buttoned-up the writing is.",
+      "enum": ["casual", "conversational", "formal"]
+    },
+    "max_sentences": {
+      "type": "integer",
+      "description": "Hard cap on sentences per comment. Most LinkedIn comments read best at 1-2.",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "emoji_frequency": {
+      "type": "string",
+      "description": "How often an emoji is allowed to show up.",
+      "enum": ["never", "rare", "occasional"]
+    },
+    "banned_phrases": {
+      "type": "array",
+      "description": "Words or phrases this brand should never write. Case-insensitive.",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "preferred_phrases": {
+      "type": "array",
+      "description": "Optional. Words or phrases that sound like this brand, used only where they fit naturally -- never forced into every comment.",
+      "items": { "type": "string" }
+    },
+    "tone_words": {
+      "type": "array",
+      "description": "Optional. 2-5 adjectives that describe the voice, e.g. 'direct', 'warm', 'no-fluff'.",
+      "items": { "type": "string" }
+    },
+    "cta_style": {
+      "type": "string",
+      "description": "Optional. How a comment is allowed to end. Defaults to soft_question.",
+      "enum": ["none", "soft_question", "direct_ask"],
+      "default": "soft_question"
+    },
+    "signoff": {
+      "type": "string",
+      "description": "Optional. Whether to address the person by first name. Defaults to none.",
+      "enum": ["none", "first_name_only"],
+      "default": "none"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional. Anything else in your own words -- 'never mention competitor names', 'always assume the reader is technical', etc."
+    },
+    "example_comments": {
+      "type": "array",
+      "description": "At least 2 real examples of this brand's voice. These are shown to the writer as style references, never copied verbatim.",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["post_context", "comment"],
+        "additionalProperties": false,
+        "properties": {
+          "post_context": {
+            "type": "string",
+            "description": "One line describing the kind of post this was replying to."
+          },
+          "comment": {
+            "type": "string",
+            "description": "The actual example comment, written the way this brand would write it."
+          }
+        }
+      }
+    }
+  }
+}
