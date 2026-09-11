@@ -253,6 +253,17 @@ export function Approvals() {
     enabled: !!accountId,
   });
 
+  // Whether anything has EVER been generated for this account, regardless of
+  // status -- the one bit of context that tells "first run" (nothing has
+  // ever been suggested here) apart from "all clear" (plenty has, and it's
+  // all been decided). Both look identical as an empty pending list; they
+  // are not the same moment for the person looking at this screen.
+  const { data: everGeneratedCount } = useQuery({
+    queryKey: ['suggestion-count', accountId, 'all'],
+    queryFn: () => outreachApi.count(accountId || undefined, 'all'),
+    enabled: !!accountId && pendingCount === 0,
+  });
+
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Which failure type the operator is working through, and in what order.
@@ -609,7 +620,36 @@ export function Approvals() {
               title="Nothing was blocked"
               body="Drafts land here when the quality gate refuses them outright — a leaked merge field, a booking link, copy over the length limit. An empty list is the good outcome."
             />
+          ) : everGeneratedCount === 0 ? (
+            // First run: this account has never had a suggestion generated at
+            // all. Distinct from "all clear" below on purpose — a brand-new
+            // account needs a next step, not congratulations for a job it
+            // hasn't started yet.
+            <EmptyState
+              icon={<Sparkles size={40} />}
+              title="Nothing generated yet"
+              body="This account hasn't had any outreach suggested. Import some people on the Targeting page, then use “Suggest who to contact” below to draft the first batch."
+              cta={{
+                label: generate.isPending ? 'Suggesting…' : 'Suggest who to contact',
+                onClick: () => generate.mutate(),
+              }}
+            />
+          ) : everGeneratedCount !== undefined ? (
+            // All clear: suggestions have existed here before and every one
+            // of them has a decision now. This is the good outcome after real
+            // work, not the same blank slate as first run — it says so.
+            <EmptyState
+              icon={<ShieldCheck size={40} />}
+              title="You're caught up"
+              body={`Every suggestion for this account has been reviewed. ${everGeneratedCount} generated so far, none left waiting. Come back after the next run, or suggest another batch now.`}
+              cta={{
+                label: generate.isPending ? 'Suggesting…' : 'Suggest another batch',
+                onClick: () => generate.mutate(),
+              }}
+            />
           ) : (
+            // Still resolving which of the two states above this is —
+            // shown only for the instant that query is in flight.
             <EmptyState
               icon={<Send size={40} />}
               title="Nothing waiting for review"
