@@ -68,9 +68,7 @@ export function Navigation() {
 
               return (
                 <Link key={item.path} to={item.path} className="shrink-0">
-                  <motion.div
-                    whileHover={reduced ? undefined : { scale: 1.03 }}
-                    whileTap={reduced ? undefined : { scale: 0.97 }}
+                  <div
                     className={clsx(
                       'relative flex items-center gap-1.5 sm:gap-2 min-h-[44px] px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap',
                       isActive
@@ -85,7 +83,7 @@ export function Navigation() {
                         {pending}
                       </span>
                     )}
-                  </motion.div>
+                  </div>
                 </Link>
               );
             })}
