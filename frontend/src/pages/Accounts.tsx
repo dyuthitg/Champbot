@@ -240,11 +240,11 @@ function ConnectForm({
         </label>
       </div>
 
-      <div className="flex items-center gap-3 mt-5">
+      <div className="flex items-center gap-3 mt-5 flex-wrap">
         <button
           onClick={() => connect.mutate()}
           disabled={connect.isPending || liAt.trim().length < 20}
-          className="btn-primary"
+          className="btn-primary shrink-0 whitespace-nowrap"
         >
           {connect.isPending ? (
             <Loader2 size={16} className="animate-spin" />
