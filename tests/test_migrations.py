@@ -163,6 +163,38 @@ def test_backfill_creates_a_holding_org_when_none_exists(db_path, sync_engine):
     assert "unassigned" in orgs[0].name.lower()
 
 
+def test_0004_repairs_a_database_missing_step_and_variant(db_path, sync_engine):
+    """
+    0004 adds outreach_suggestions.step/.variant to a database that predates
+    them, without erroring on one that already has them.
+
+    This is the drift 0004 exists to fix: 0001_baseline.py describes the
+    *current* model shape (it says so in its own docstring), not the shape any
+    specific already-running deployment was actually stamped against. A
+    database whose outreach_suggestions table was created before Jul 30 and
+    later stamped (not migrated) to 0001 would be marked up to date while
+    still missing both columns -- exactly reproduced here by upgrading to
+    0003, then manually dropping the columns a stamp-without-upgrade could
+    leave missing, before running 0004.
+    """
+    config = alembic_config(db_path)
+    command.upgrade(config, "0003")
+
+    with sync_engine.begin() as conn:
+        conn.execute(sa.text("ALTER TABLE outreach_suggestions DROP COLUMN step"))
+        conn.execute(sa.text("ALTER TABLE outreach_suggestions DROP COLUMN variant"))
+
+    cols_before = {c["name"] for c in sa.inspect(sync_engine).get_columns("outreach_suggestions")}
+    assert "step" not in cols_before
+    assert "variant" not in cols_before
+
+    command.upgrade(config, "0004")  # must not raise, must add both columns
+
+    cols_after = {c["name"] for c in sa.inspect(sync_engine).get_columns("outreach_suggestions")}
+    assert "step" in cols_after
+    assert "variant" in cols_after
+
+
 def test_backfill_never_adopts_into_an_existing_real_org_by_accident(db_path, sync_engine):
     """
     The holding-org fallback only ever fires when *zero* organizations exist.
