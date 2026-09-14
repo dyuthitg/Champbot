@@ -63,7 +63,14 @@ export function Navigation() {
           >
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname.startsWith(item.path);
+              // Plain startsWith made "/accounts" match the "/account" tab
+              // too -- literally, "/accounts".startsWith("/account") is
+              // true -- so both lit up together. A path boundary (exact
+              // match, or the next char is "/") is what "startsWith"
+              // actually meant here.
+              const isActive =
+                location.pathname === item.path ||
+                location.pathname.startsWith(`${item.path}/`);
               const showBadge = item.badge && pending > 0;
 
               return (
