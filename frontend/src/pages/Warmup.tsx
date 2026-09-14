@@ -109,8 +109,8 @@ export function Warmup() {
           </p>
         </div>
 
-        <div className="flex items-end gap-2">
-          <label className="flex flex-col gap-1">
+        <div className="flex items-end gap-2 flex-wrap">
+          <label className="flex flex-col gap-1 min-w-0">
             <span className="text-xs text-slate-400">Account</span>
             <select
               value={accountId}
@@ -118,7 +118,7 @@ export function Warmup() {
                 setAccountId(e.target.value);
                 setReport(null);
               }}
-              className="select"
+              className="select min-w-0"
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -130,7 +130,7 @@ export function Warmup() {
           <button
             onClick={() => runPreflight.mutate()}
             disabled={runPreflight.isPending}
-            className="btn-ghost"
+            className="btn-ghost shrink-0 whitespace-nowrap"
             title="Read-only check — sends nothing"
           >
             <RefreshCw

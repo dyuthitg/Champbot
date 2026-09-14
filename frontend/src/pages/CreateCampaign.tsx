@@ -248,13 +248,13 @@ export function CreateCampaign() {
       </div>
 
       {/* Navigation Buttons */}
-      <div className="flex justify-between gap-3">
+      <div className="flex justify-between gap-3 flex-wrap">
         {currentStep > 1 ? (
           <motion.button
             whileHover={reduced ? undefined : { scale: 1.05 }}
             whileTap={reduced ? undefined : { scale: 0.95 }}
             onClick={prevStep}
-            className="flex items-center gap-2 px-6 py-3 min-h-[44px] border border-border rounded-lg font-medium text-muted hover:bg-surface"
+            className="flex items-center gap-2 px-6 py-3 min-h-[44px] shrink-0 whitespace-nowrap border border-border rounded-lg font-medium text-muted hover:bg-surface"
           >
             <ArrowLeft size={20} />
             Previous
@@ -270,7 +270,7 @@ export function CreateCampaign() {
             onClick={nextStep}
             disabled={!isStepValid()}
             className={clsx(
-              'flex items-center gap-2 px-6 py-3 min-h-[44px] rounded-lg font-medium',
+              'flex items-center gap-2 px-6 py-3 min-h-[44px] shrink-0 whitespace-nowrap rounded-lg font-medium',
               isStepValid()
                 ? 'bg-accent text-white hover:bg-accent/85'
                 : 'bg-slate-700/60 text-muted cursor-not-allowed'
@@ -286,7 +286,7 @@ export function CreateCampaign() {
             onClick={handleSubmit}
             disabled={!isStepValid() || createMutation.isPending}
             className={clsx(
-              'flex items-center gap-2 px-6 py-3 min-h-[44px] rounded-lg font-medium',
+              'flex items-center gap-2 px-6 py-3 min-h-[44px] shrink-0 whitespace-nowrap rounded-lg font-medium',
               isStepValid() && !createMutation.isPending
                 ? 'bg-success text-white hover:bg-success/85'
                 : 'bg-slate-700/60 text-muted cursor-not-allowed'
