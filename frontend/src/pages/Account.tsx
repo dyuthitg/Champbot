@@ -53,7 +53,12 @@ function SignedInAccount() {
             </div>
           </div>
         </div>
-        <Button variant="ghost" icon={<LogOut size={16} />} onClick={() => signOut()}>
+        <Button
+          variant="ghost"
+          icon={<LogOut size={16} />}
+          onClick={() => signOut()}
+          className="shrink-0 whitespace-nowrap"
+        >
           Sign out
         </Button>
       </Card>
