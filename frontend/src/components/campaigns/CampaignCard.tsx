@@ -19,54 +19,27 @@ interface CampaignCardProps {
   campaign: Campaign;
 }
 
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Dot + border colour per status. Text always renders on the dark card
+// surface, never inside a light chip, so every entry needs only the two
+// colours that actually get used below.
 const statusConfig = {
-  draft: {
-    color: 'bg-gray-500',
-    textColor: 'text-gray-700',
-    bgColor: 'bg-gray-50',
-    borderColor: 'border-gray-200',
-  },
-  scheduled: {
-    color: 'bg-purple-500',
-    textColor: 'text-purple-700',
-    bgColor: 'bg-purple-50',
-    borderColor: 'border-purple-200',
-  },
-  running: {
-    color: 'bg-blue-500',
-    textColor: 'text-blue-700',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
-  },
-  paused: {
-    color: 'bg-yellow-500',
-    textColor: 'text-yellow-700',
-    bgColor: 'bg-yellow-50',
-    borderColor: 'border-yellow-200',
-  },
-  completed: {
-    color: 'bg-green-500',
-    textColor: 'text-green-700',
-    bgColor: 'bg-green-50',
-    borderColor: 'border-green-200',
-  },
-  failed: {
-    color: 'bg-red-500',
-    textColor: 'text-red-700',
-    bgColor: 'bg-red-50',
-    borderColor: 'border-red-200',
-  },
-  cancelled: {
-    color: 'bg-gray-400',
-    textColor: 'text-gray-600',
-    bgColor: 'bg-gray-50',
-    borderColor: 'border-gray-200',
-  },
+  draft: { dot: 'bg-slate-400', border: 'border-border' },
+  scheduled: { dot: 'bg-purple-400', border: 'border-purple-500/40' },
+  running: { dot: 'bg-accent', border: 'border-accent/50' },
+  paused: { dot: 'bg-warn', border: 'border-warn/40' },
+  completed: { dot: 'bg-success-fg', border: 'border-success/40' },
+  failed: { dot: 'bg-danger', border: 'border-danger/40' },
+  cancelled: { dot: 'bg-slate-500', border: 'border-border' },
 };
 
 export function CampaignCard({ campaign }: CampaignCardProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const reduced = prefersReducedMotion();
 
   const startMutation = useMutation({
     mutationFn: () => campaignApi.start(campaign.id),
@@ -104,85 +77,81 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
     <motion.div
       layout
       layoutId={`campaign-${campaign.id}`}
-      initial={{ opacity: 0, y: 20 }}
+      initial={reduced ? undefined : { opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      whileHover={{
-        scale: 1.02,
-        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.12)',
-        transition: { duration: 0.2 },
-      }}
-      whileTap={{ scale: 0.98 }}
+      exit={reduced ? undefined : { opacity: 0, scale: 0.9 }}
+      whileHover={reduced ? undefined : { scale: 1.01 }}
+      whileTap={reduced ? undefined : { scale: 0.98 }}
       onClick={() => navigate(`/campaigns/${campaign.id}`)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          navigate(`/campaigns/${campaign.id}`);
+        }
+      }}
       className={clsx(
-        'bg-white rounded-xl p-6 shadow-md cursor-pointer border-2',
-        'transition-all duration-200',
-        config.borderColor
+        'bg-surface rounded-xl p-6 cursor-pointer border transition-colors',
+        config.border
       )}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         {/* Status Badge */}
         <motion.div
-          className={clsx(
-            'inline-flex items-center gap-2 px-3 py-1 rounded-full text-white text-sm font-medium',
-            config.color
-          )}
+          className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium bg-slate-900/60 text-foreground"
           animate={
-            isRunning
-              ? {
-                  scale: [1, 1.05, 1],
-                  transition: { duration: 2, repeat: Infinity },
-                }
+            isRunning && !reduced
+              ? { scale: [1, 1.05, 1], transition: { duration: 2, repeat: Infinity } }
               : {}
           }
         >
-          {isRunning && (
-            <motion.span
-              className="w-2 h-2 bg-white rounded-full"
-              animate={{
-                opacity: [1, 0.3, 1],
-                transition: { duration: 1.5, repeat: Infinity },
-              }}
-            />
-          )}
+          <motion.span
+            className={clsx('w-2 h-2 rounded-full', config.dot)}
+            animate={
+              isRunning && !reduced
+                ? { opacity: [1, 0.3, 1], transition: { duration: 1.5, repeat: Infinity } }
+                : {}
+            }
+          />
           <span className="capitalize">{campaign.status}</span>
         </motion.div>
 
         {/* Date */}
-        <div className="flex items-center gap-1 text-sm text-gray-500">
+        <div className="flex items-center gap-1 text-sm text-muted">
           <Calendar size={14} />
           <span>{format(new Date(campaign.created_at), 'MMM d, yyyy')}</span>
         </div>
       </div>
 
       {/* Campaign Info */}
-      <h3 className="text-xl font-bold text-gray-900 mb-2 line-clamp-1">
+      <h3 className="text-lg font-semibold text-foreground mb-2 line-clamp-1">
         {campaign.name}
       </h3>
-      <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+      <p className="text-muted text-sm mb-4 line-clamp-2">
         {campaign.description}
       </p>
 
       {/* Actions Summary */}
       <div className="flex flex-wrap gap-2 mb-4">
         {campaign.actions.like && (
-          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+          <span className="px-2 py-1 bg-slate-900/60 text-slate-300 rounded text-xs font-medium">
             👍 Like
           </span>
         )}
         {campaign.actions.comment && (
-          <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+          <span className="px-2 py-1 bg-slate-900/60 text-slate-300 rounded text-xs font-medium">
             💬 Comment
           </span>
         )}
         {campaign.actions.share && (
-          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+          <span className="px-2 py-1 bg-slate-900/60 text-slate-300 rounded text-xs font-medium">
             🔄 Share
           </span>
         )}
         {campaign.actions.follow && (
-          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+          <span className="px-2 py-1 bg-slate-900/60 text-slate-300 rounded text-xs font-medium">
             ➕ Follow
           </span>
         )}
@@ -191,74 +160,78 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
       {/* Progress Bar */}
       <div className="mb-4">
         <div className="flex justify-between text-sm mb-2">
-          <span className="font-medium text-gray-700">Progress</span>
+          <span className="font-medium text-muted">Progress</span>
           <motion.span
             key={progress}
-            initial={{ scale: 1.2, color: '#3b82f6' }}
-            animate={{ scale: 1, color: '#374151' }}
+            initial={reduced ? undefined : { scale: 1.2 }}
+            animate={{ scale: 1 }}
             transition={{ duration: 0.3 }}
-            className="font-bold"
+            className="font-semibold text-foreground"
           >
             {Math.round(progress)}%
           </motion.span>
         </div>
 
-        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div className="h-2 bg-slate-900/70 rounded-full overflow-hidden">
           <motion.div
-            className="h-full bg-gradient-to-r from-blue-500 to-blue-600"
-            initial={{ width: 0 }}
+            className="h-full bg-gradient-to-r from-accent to-purple-600"
+            initial={reduced ? { width: `${progress}%` } : { width: 0 }}
             animate={{ width: `${progress}%` }}
-            transition={{ duration: 1, ease: 'easeOut' }}
+            transition={reduced ? { duration: 0 } : { duration: 1, ease: 'easeOut' }}
           />
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4">
         <StatItem
           icon={<Target size={16} />}
           label="Total"
           value={campaign.progress.total_tasks}
           delay={0.1}
+          color="text-foreground"
+          reduced={reduced}
         />
         <StatItem
           icon={<CheckCircle2 size={16} />}
           label="Done"
           value={campaign.progress.completed_tasks}
           delay={0.2}
-          color="text-green-600"
+          color="text-success-fg"
+          reduced={reduced}
         />
         <StatItem
           icon={<XCircle size={16} />}
           label="Failed"
           value={campaign.progress.failed_tasks}
           delay={0.3}
-          color="text-red-600"
+          color="text-danger-fg"
+          reduced={reduced}
         />
       </div>
 
       {/* Action Button */}
       <motion.button
-        whileHover={{ scale: isLoading ? 1 : 1.05 }}
-        whileTap={{ scale: isLoading ? 1 : 0.95 }}
+        whileHover={reduced || isLoading ? undefined : { scale: 1.02 }}
+        whileTap={reduced || isLoading ? undefined : { scale: 0.98 }}
         onClick={handleAction}
         disabled={isLoading || campaign.status === 'completed'}
         className={clsx(
-          'w-full py-2 px-4 rounded-lg font-medium text-white',
+          'w-full min-h-[44px] sm:min-h-0 py-2 px-4 rounded-lg font-medium text-white',
           'transition-colors duration-200',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           'flex items-center justify-center gap-2',
           isRunning
-            ? 'bg-yellow-500 hover:bg-yellow-600'
+            ? 'bg-warn hover:bg-warn/85'
             : campaign.status === 'completed'
-            ? 'bg-gray-400'
-            : 'bg-green-500 hover:bg-green-600'
+            ? 'bg-slate-600'
+            : 'bg-success hover:bg-success/85'
         )}
       >
         {isLoading ? (
           <>
             <motion.div
-              animate={{ rotate: 360 }}
+              animate={reduced ? undefined : { rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
             >
               <Loader2 size={18} />
@@ -292,25 +265,26 @@ interface StatItemProps {
   value: number;
   delay?: number;
   color?: string;
+  reduced?: boolean;
 }
 
-function StatItem({ icon, label, value, delay = 0, color = 'text-gray-900' }: StatItemProps) {
+function StatItem({ icon, label, value, delay = 0, color = 'text-foreground', reduced }: StatItemProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={reduced ? undefined : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
+      transition={{ delay: reduced ? 0 : delay }}
       className="text-center"
     >
-      <div className="flex items-center justify-center gap-1 text-gray-500 mb-1">
+      <div className="flex items-center justify-center gap-1 text-muted mb-1">
         {icon}
         <p className="text-xs">{label}</p>
       </div>
       <motion.p
         className={clsx('text-2xl font-bold', color)}
-        initial={{ scale: 0 }}
+        initial={reduced ? undefined : { scale: 0 }}
         animate={{ scale: 1 }}
-        transition={{ type: 'spring', stiffness: 200, delay: delay + 0.1 }}
+        transition={{ type: 'spring', stiffness: 200, delay: reduced ? 0 : delay + 0.1 }}
       >
         {value}
       </motion.p>

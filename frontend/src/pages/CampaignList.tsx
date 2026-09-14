@@ -10,6 +10,10 @@ import { useGeneralWebSocket } from '@/hooks/useWebSocket';
 import type { CampaignStatus } from '@/types';
 import { clsx } from 'clsx';
 
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 const statusFilters: { label: string; value: CampaignStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
   { label: 'Running', value: 'running' },
@@ -37,9 +41,9 @@ export function CampaignList() {
     refetchInterval: 5000, // Refetch every 5 seconds
   });
 
-  // GSAP: Animate page entry
+  // GSAP: Animate page entry -- off entirely under prefers-reduced-motion.
   useEffect(() => {
-    if (!containerRef.current || !headingRef.current) return;
+    if (!containerRef.current || !headingRef.current || prefersReducedMotion()) return;
 
     const ctx = gsap.context(() => {
       const tl = gsap.timeline();
@@ -91,123 +95,122 @@ export function CampaignList() {
   }, {} as Record<string, number>);
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1
-                ref={headingRef}
-                className="text-4xl font-bold text-gray-900 mb-2"
-              >
-                LinkedIn Campaigns
-              </h1>
-              <p className="text-gray-600">
-                Manage your automation campaigns
-                {isConnected && (
-                  <span className="ml-2 inline-flex items-center gap-1 text-sm text-green-600">
-                    <motion.span
-                      className="w-2 h-2 bg-green-500 rounded-full"
-                      animate={{
-                        opacity: [1, 0.3, 1],
-                        transition: { duration: 2, repeat: Infinity },
-                      }}
-                    />
-                    Live
-                  </span>
-                )}
-              </p>
-            </div>
-
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/campaigns/new')}
-              className="flex items-center gap-2 px-6 py-3 bg-linkedin-500 text-white rounded-lg font-medium shadow-lg hover:bg-linkedin-600 transition-colors"
+    <div ref={containerRef} className="max-w-7xl mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div>
+            <h1
+              ref={headingRef}
+              className="text-2xl font-semibold text-slate-100 mb-2"
             >
-              <Plus size={20} />
-              New Campaign
-            </motion.button>
-          </div>
-
-          {/* Filters and Search */}
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-            {/* Status Filters */}
-            <div className="flex flex-wrap gap-2">
-              {statusFilters.map((filter) => {
-                const count =
-                  filter.value === 'all'
-                    ? data?.total || 0
-                    : statusCounts?.[filter.value] || 0;
-
-                return (
-                  <FilterButton
-                    key={filter.value}
-                    label={filter.label}
-                    count={count}
-                    active={statusFilter === filter.value}
-                    onClick={() => setStatusFilter(filter.value)}
+              LinkedIn Campaigns
+            </h1>
+            <p className="text-muted">
+              Manage your automation campaigns
+              {isConnected && (
+                <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">
+                  <motion.span
+                    className="w-2 h-2 bg-success-fg rounded-full"
+                    animate={
+                      prefersReducedMotion()
+                        ? undefined
+                        : { opacity: [1, 0.3, 1], transition: { duration: 2, repeat: Infinity } }
+                    }
                   />
-                );
-              })}
-            </div>
-
-            {/* Search Bar */}
-            <div className="search-bar relative w-full md:w-64">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                size={20}
-              />
-              <input
-                type="text"
-                placeholder="Search campaigns..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-linkedin-500 focus:border-transparent outline-none"
-              />
-            </div>
+                  Live
+                </span>
+              )}
+            </p>
           </div>
+
+          <motion.button
+            whileHover={prefersReducedMotion() ? undefined : { scale: 1.05 }}
+            whileTap={prefersReducedMotion() ? undefined : { scale: 0.95 }}
+            onClick={() => navigate('/campaigns/new')}
+            className="btn-primary min-h-[44px] sm:min-h-0 px-6 py-3"
+          >
+            <Plus size={20} />
+            New Campaign
+          </motion.button>
         </div>
 
-        {/* Campaign Grid */}
-        {isLoading ? (
-          <LoadingState />
-        ) : error ? (
-          <ErrorState message="Failed to load campaigns" />
-        ) : filteredCampaigns && filteredCampaigns.length > 0 ? (
-          <motion.div
-            layout
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-          >
-            <AnimatePresence mode="popLayout">
-              {filteredCampaigns.map((campaign) => (
-                <CampaignCard key={campaign.id} campaign={campaign} />
-              ))}
-            </AnimatePresence>
-          </motion.div>
-        ) : (
-          <EmptyState
-            message={
-              searchQuery
-                ? 'No campaigns match your search'
-                : 'No campaigns yet'
-            }
-            action={
-              !searchQuery && (
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => navigate('/campaigns/new')}
-                  className="mt-4 px-6 py-3 bg-linkedin-500 text-white rounded-lg font-medium"
-                >
-                  Create Your First Campaign
-                </motion.button>
-              )
-            }
-          />
-        )}
+        {/* Filters and Search */}
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+          {/* Status Filters */}
+          <div className="flex flex-wrap gap-2">
+            {statusFilters.map((filter) => {
+              const count =
+                filter.value === 'all'
+                  ? data?.total || 0
+                  : statusCounts?.[filter.value] || 0;
+
+              return (
+                <FilterButton
+                  key={filter.value}
+                  label={filter.label}
+                  count={count}
+                  active={statusFilter === filter.value}
+                  onClick={() => setStatusFilter(filter.value)}
+                />
+              );
+            })}
+          </div>
+
+          {/* Search Bar */}
+          <div className="search-bar relative w-full md:w-64">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+              size={18}
+            />
+            <input
+              type="text"
+              placeholder="Search campaigns..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input w-full pl-10"
+            />
+          </div>
+        </div>
       </div>
+
+      {/* Campaign Grid */}
+      {isLoading ? (
+        <LoadingState />
+      ) : error ? (
+        <ErrorState message="Failed to load campaigns" />
+      ) : filteredCampaigns && filteredCampaigns.length > 0 ? (
+        <motion.div
+          layout
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+        >
+          <AnimatePresence mode="popLayout">
+            {filteredCampaigns.map((campaign) => (
+              <CampaignCard key={campaign.id} campaign={campaign} />
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      ) : (
+        <EmptyState
+          message={
+            searchQuery
+              ? 'No campaigns match your search'
+              : 'No campaigns yet'
+          }
+          action={
+            !searchQuery && (
+              <motion.button
+                whileHover={prefersReducedMotion() ? undefined : { scale: 1.05 }}
+                whileTap={prefersReducedMotion() ? undefined : { scale: 0.95 }}
+                onClick={() => navigate('/campaigns/new')}
+                className="btn-primary min-h-[44px] sm:min-h-0 mt-4 px-6 py-3"
+              >
+                Create Your First Campaign
+              </motion.button>
+            )
+          }
+        />
+      )}
     </div>
   );
 }
@@ -220,20 +223,21 @@ interface FilterButtonProps {
 }
 
 function FilterButton({ label, count, active = false, onClick }: FilterButtonProps) {
+  const reduced = prefersReducedMotion();
   return (
     <motion.button
       className={clsx(
-        'filter-button px-4 py-2 rounded-lg font-medium transition-colors',
+        'filter-button min-h-[44px] sm:min-h-0 px-4 py-2 rounded-lg font-medium text-sm transition-colors',
         active
-          ? 'bg-linkedin-500 text-white shadow-md'
-          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
+          ? 'bg-accent/15 text-purple-300 border border-accent/40'
+          : 'bg-surface text-muted hover:text-foreground hover:bg-slate-700/60 border border-border'
       )}
-      whileHover={{ scale: active ? 1 : 1.05 }}
-      whileTap={{ scale: 0.95 }}
+      whileHover={reduced ? undefined : { scale: active ? 1 : 1.05 }}
+      whileTap={reduced ? undefined : { scale: 0.95 }}
       onClick={onClick}
     >
       {label}
-      <span className={clsx('ml-2 text-sm', active ? 'opacity-90' : 'opacity-60')}>
+      <span className={clsx('ml-2 text-xs', active ? 'opacity-90' : 'opacity-60')}>
         ({count})
       </span>
     </motion.button>
@@ -241,28 +245,30 @@ function FilterButton({ label, count, active = false, onClick }: FilterButtonPro
 }
 
 function LoadingState() {
+  const reduced = prefersReducedMotion();
   return (
     <div className="flex flex-col items-center justify-center py-20">
       <motion.div
-        animate={{ rotate: 360 }}
+        animate={reduced ? undefined : { rotate: 360 }}
         transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
       >
-        <Loader2 size={48} className="text-linkedin-500" />
+        <Loader2 size={48} className="text-accent" />
       </motion.div>
-      <p className="mt-4 text-gray-600">Loading campaigns...</p>
+      <p className="mt-4 text-muted">Loading campaigns...</p>
     </div>
   );
 }
 
 function ErrorState({ message }: { message: string }) {
+  const reduced = prefersReducedMotion();
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={reduced ? undefined : { opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col items-center justify-center py-20"
     >
-      <div className="bg-red-50 border-2 border-red-200 rounded-lg p-8 max-w-md text-center">
-        <p className="text-red-700 font-medium">{message}</p>
+      <div className="bg-danger/10 border border-danger/40 rounded-lg p-8 max-w-md text-center">
+        <p className="text-danger-fg font-medium">{message}</p>
       </div>
     </motion.div>
   );
@@ -275,15 +281,16 @@ function EmptyState({
   message: string;
   action?: React.ReactNode;
 }) {
+  const reduced = prefersReducedMotion();
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={reduced ? undefined : { opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col items-center justify-center py-20"
     >
       <div className="text-center">
         <div className="text-6xl mb-4">📊</div>
-        <p className="text-xl text-gray-600 mb-2">{message}</p>
+        <p className="text-lg text-muted mb-2">{message}</p>
         {action}
       </div>
     </motion.div>

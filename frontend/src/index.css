@@ -26,21 +26,24 @@
            focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent;
   }
 
+  /* min-h-[44px] guarantees a phone-sized tap target without bulking up the
+     desktop button -- it collapses back to the natural (smaller) height on
+     screens wide enough that a mouse, not a thumb, is doing the clicking. */
   .btn-primary {
-    @apply inline-flex items-center gap-2 rounded-lg bg-accent hover:bg-accent/85
-           text-white px-4 py-2 text-sm font-medium transition-colors
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-accent hover:bg-accent/85
+           text-white px-4 py-2 min-h-[44px] sm:min-h-0 text-sm font-medium transition-colors
            disabled:opacity-40 disabled:cursor-not-allowed;
   }
 
   .btn-approve {
-    @apply inline-flex items-center gap-2 rounded-lg bg-success hover:bg-success/85
-           text-white px-4 py-2 text-sm font-medium transition-colors
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-success hover:bg-success/85
+           text-white px-4 py-2 min-h-[44px] sm:min-h-0 text-sm font-medium transition-colors
            disabled:opacity-40 disabled:cursor-not-allowed;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center gap-2 rounded-lg text-slate-300 hover:bg-slate-700/60
-           px-3 py-2 text-sm font-medium transition-colors
+    @apply inline-flex items-center justify-center gap-2 rounded-lg text-slate-300 hover:bg-slate-700/60
+           px-3 py-2 min-h-[44px] sm:min-h-0 text-sm font-medium transition-colors
            disabled:opacity-40 disabled:cursor-not-allowed;
   }
 }
@@ -83,4 +86,26 @@ html {
 /* Focus visible for accessibility */
 *:focus-visible {
   @apply outline-2 outline-offset-2 outline-purple-500;
+}
+
+/* prefers-reduced-motion: reduce -- the CSS half of the fix. This catches
+   scroll-behavior and any plain CSS transition/animation (Tailwind's
+   animate-spin/animate-pulse, hover transitions). It can't reach the
+   framer-motion / GSAP timelines used for page-entry and hover effects --
+   those are JS-driven, so each of those call sites checks
+   window.matchMedia('(prefers-reduced-motion: reduce)') itself and skips
+   the animation outright rather than just shortening it. Nothing on any
+   screen in this app depends on motion to be understood -- an entrance
+   animation not playing should never hide content or leave a control
+   unusable. Loading spinners (animate-spin) are left alone: they're status
+   feedback, not decoration, and a still spinner reads as "frozen." */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *:not(.animate-spin):not(.animate-spin *) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -28,7 +28,7 @@ export function Button({ variant = 'ghost', icon, children, className, ...props 
   return (
     <button
       className={clsx(
-        'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+        'inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 min-h-[44px] sm:min-h-0 text-sm font-medium transition-colors',
         'disabled:opacity-40 disabled:cursor-not-allowed',
         variants[variant],
         className,

@@ -389,7 +389,11 @@ function TagInput({
             )}
           >
             {value}
-            <button onClick={() => onChange(values.filter((v) => v !== value))}>
+            <button
+              onClick={() => onChange(values.filter((v) => v !== value))}
+              className="p-2 -m-2 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-500"
+              aria-label={`Remove ${value}`}
+            >
               <X size={11} />
             </button>
           </span>

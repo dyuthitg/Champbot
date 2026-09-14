@@ -267,18 +267,22 @@ function AccountCard({ account }: { account: AccountStats }) {
   const runOk = account.last_run_ok;
   return (
     <div className="rounded-xl bg-slate-800/60 border border-slate-700 p-4 flex flex-wrap items-center gap-4">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+      <div className="min-w-0 flex-1 basis-full sm:basis-auto">
+        {/* flex-wrap here, not truncate-under-pressure: when the row runs out
+            of room, "outreach" drops to its own line rather than squeezing
+            the account name down to nothing while the mode label survives
+            (Week 1 audit — the name used to lose that fight every time). */}
+        <div className="flex items-center gap-2 flex-wrap">
           <span
             className={clsx(
-              'w-2 h-2 rounded-full',
+              'w-2 h-2 rounded-full shrink-0',
               account.status === 'active' ? 'bg-emerald-400' : 'bg-amber-400',
             )}
           />
-          <h3 className="text-slate-100 font-medium truncate">
+          <h3 className="text-slate-100 font-medium truncate max-w-full">
             {account.display_name ?? 'Unnamed account'}
           </h3>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-slate-500 shrink-0">
             {account.mode === 'account_based_engagement' ? 'engagement' : 'outreach'}
           </span>
         </div>
@@ -288,7 +292,7 @@ function AccountCard({ account }: { account: AccountStats }) {
         </div>
       </div>
 
-      <div className="flex gap-5 text-center">
+      <div className="flex flex-wrap gap-4 sm:gap-5 text-center">
         <Metric label="to review" value={account.pending_review} accent />
         <Metric label="queued" value={account.scheduled} />
         <Metric label="today" value={account.sent_today} />

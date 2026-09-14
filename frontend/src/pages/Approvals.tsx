@@ -833,7 +833,7 @@ export function Approvals() {
               </span>
               <button
                 onClick={() => undoPending(p.key)}
-                className="text-accent font-medium hover:underline shrink-0"
+                className="text-accent font-medium hover:underline shrink-0 min-h-[44px] sm:min-h-0 px-2 -mx-2 flex items-center"
               >
                 Undo
               </button>
@@ -1515,7 +1515,7 @@ function TabButton({
       onClick={onClick}
       aria-pressed={active}
       className={clsx(
-        'relative px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-medium whitespace-nowrap',
+        'relative px-2.5 sm:px-3 py-2 min-h-[44px] sm:min-h-0 text-xs sm:text-sm font-medium whitespace-nowrap',
         'transition-colors -mb-px border-b-2',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-t',
         active

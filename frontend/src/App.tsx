@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
 import { Account } from './pages/Account';
 import { Accounts } from './pages/Accounts';
 import { AgentMonitor } from './pages/AgentMonitor';
@@ -26,12 +26,20 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <div className="min-h-screen bg-background">
-          <Navigation />
-          <AnimatedRoutes />
-        </div>
-      </BrowserRouter>
+      {/* reducedMotion="user" is the one-line version of what index.css and
+          the GSAP call sites do by hand for everything else: when the OS
+          says reduce motion, every whileHover/whileTap/initial/animate in
+          the app snaps straight to its end state instead of animating.
+          Nothing here needs to move to be understood, so "off" is the
+          correct behaviour, not "shorter." */}
+      <MotionConfig reducedMotion="user">
+        <BrowserRouter>
+          <div className="min-h-screen bg-background">
+            <Navigation />
+            <AnimatedRoutes />
+          </div>
+        </BrowserRouter>
+      </MotionConfig>
     </QueryClientProvider>
   );
 }
