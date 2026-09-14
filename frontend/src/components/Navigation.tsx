@@ -14,10 +14,10 @@ const navItems = [
   { path: '/approvals', label: 'Approvals', icon: Inbox, badge: true },
   { path: '/warmup', label: 'Warm-up', icon: Flame },
   { path: '/targeting', label: 'Targeting', icon: Target },
-  { path: '/accounts', label: 'Accounts', icon: Users },
+  { path: '/accounts', label: 'LinkedIn Accounts', icon: Users },
   { path: '/campaigns', label: 'Campaigns', icon: Megaphone },
   { path: '/agents', label: 'Agents', icon: Activity },
-  { path: '/account', label: 'Account', icon: User },
+  { path: '/account', label: 'Login Account', icon: User },
 ];
 
 export function Navigation() {

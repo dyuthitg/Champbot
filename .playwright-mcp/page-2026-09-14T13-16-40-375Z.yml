@@ -1,0 +1,9 @@
+- generic [active] [ref=f7e1]:
+  - generic [ref=f7e2]:
+    - button "Approve" [ref=f7e3] [cursor=pointer]
+    - button "Skip" [ref=f7e4] [cursor=pointer]
+    - button "Open" [ref=f7e5] [cursor=pointer]
+  - generic [ref=f7e6]:
+    - generic [ref=f7e7]: Never contact this person?
+    - button "Confirm" [ref=f7e8] [cursor=pointer]
+    - button "Cancel" [ref=f7e9] [cursor=pointer]

@@ -33,7 +33,7 @@ function SignedInAccount() {
 
   return (
     <div className="max-w-xl mx-auto px-4 py-10">
-      <h1 className="text-xl font-semibold text-foreground mb-1">Account</h1>
+      <h1 className="text-xl font-semibold text-foreground mb-1">Login Account</h1>
       <p className="text-muted text-sm mb-6">
         Who this browser is signed in as, and a way out.
       </p>

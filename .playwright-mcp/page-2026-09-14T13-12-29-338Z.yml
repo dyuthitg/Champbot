@@ -1,0 +1,114 @@
+- generic [ref=f2e3]:
+  - navigation [ref=f2e4]:
+    - generic [ref=f2e6]:
+      - link "Social Bot" [ref=f2e7] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f2e9]:
+        - link "Overview" [ref=f2e10] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Approvals" [ref=f2e18] [cursor=pointer]:
+          - /url: /approvals
+        - link "Warm-up" [ref=f2e24] [cursor=pointer]:
+          - /url: /warmup
+        - link "Targeting" [ref=f2e29] [cursor=pointer]:
+          - /url: /targeting
+        - link "Accounts" [ref=f2e36] [cursor=pointer]:
+          - /url: /accounts
+        - link "Campaigns" [ref=f2e44] [cursor=pointer]:
+          - /url: /campaigns
+        - link "Agents" [ref=f2e50] [cursor=pointer]:
+          - /url: /agents
+        - link "Account" [ref=f2e55] [cursor=pointer]:
+          - /url: /account
+  - generic [ref=f2e62]:
+    - generic [ref=f2e63]:
+      - generic [ref=f2e65]:
+        - heading "Agent Activity Monitor" [level=1] [ref=f2e66]
+        - paragraph [ref=f2e67]: Real-time status of all automation agents
+      - generic [ref=f2e71]:
+        - generic [ref=f2e72]:
+          - generic [ref=f2e73]: Total Agents
+          - paragraph: "5"
+        - generic [ref=f2e78]:
+          - generic [ref=f2e79]: Active
+          - paragraph: "0"
+        - generic [ref=f2e84]:
+          - generic [ref=f2e85]: Idle
+          - paragraph: "5"
+        - generic [ref=f2e91]:
+          - generic [ref=f2e92]: Completed
+          - paragraph: "0"
+        - generic [ref=f2e98]:
+          - generic [ref=f2e99]: Failed
+          - paragraph: "0"
+    - generic [ref=f2e106]:
+      - generic [ref=f2e114]:
+        - generic [ref=f2e115]:
+          - heading "Account Manager" [level=3] [ref=f2e116]
+          - generic [ref=f2e117]: idle
+        - generic [ref=f2e120]:
+          - generic [ref=f2e121]:
+            - paragraph [ref=f2e122]: Completed
+            - paragraph [ref=f2e123]: "0"
+          - generic [ref=f2e124]:
+            - paragraph [ref=f2e125]: Failed
+            - paragraph [ref=f2e126]: "0"
+          - generic [ref=f2e127]:
+            - paragraph [ref=f2e128]: Last Active
+            - paragraph [ref=f2e129]: less than a minute ago
+      - generic [ref=f2e136]:
+        - generic [ref=f2e137]:
+          - heading "Content Analysis" [level=3] [ref=f2e138]
+          - generic [ref=f2e139]: idle
+        - generic [ref=f2e142]:
+          - generic [ref=f2e143]:
+            - paragraph [ref=f2e144]: Completed
+            - paragraph [ref=f2e145]: "0"
+          - generic [ref=f2e146]:
+            - paragraph [ref=f2e147]: Failed
+            - paragraph [ref=f2e148]: "0"
+          - generic [ref=f2e149]:
+            - paragraph [ref=f2e150]: Last Active
+            - paragraph [ref=f2e151]: less than a minute ago
+      - generic [ref=f2e157]:
+        - generic [ref=f2e158]:
+          - heading "Interaction" [level=3] [ref=f2e159]
+          - generic [ref=f2e160]: idle
+        - generic [ref=f2e163]:
+          - generic [ref=f2e164]:
+            - paragraph [ref=f2e165]: Completed
+            - paragraph [ref=f2e166]: "0"
+          - generic [ref=f2e167]:
+            - paragraph [ref=f2e168]: Failed
+            - paragraph [ref=f2e169]: "0"
+          - generic [ref=f2e170]:
+            - paragraph [ref=f2e171]: Last Active
+            - paragraph [ref=f2e172]: less than a minute ago
+      - generic [ref=f2e178]:
+        - generic [ref=f2e179]:
+          - heading "Conversation" [level=3] [ref=f2e180]
+          - generic [ref=f2e181]: idle
+        - generic [ref=f2e184]:
+          - generic [ref=f2e185]:
+            - paragraph [ref=f2e186]: Completed
+            - paragraph [ref=f2e187]: "0"
+          - generic [ref=f2e188]:
+            - paragraph [ref=f2e189]: Failed
+            - paragraph [ref=f2e190]: "0"
+          - generic [ref=f2e191]:
+            - paragraph [ref=f2e192]: Last Active
+            - paragraph [ref=f2e193]: less than a minute ago
+      - generic [ref=f2e199]:
+        - generic [ref=f2e200]:
+          - heading "Safety" [level=3] [ref=f2e201]
+          - generic [ref=f2e202]: idle
+        - generic [ref=f2e205]:
+          - generic [ref=f2e206]:
+            - paragraph [ref=f2e207]: Completed
+            - paragraph [ref=f2e208]: "0"
+          - generic [ref=f2e209]:
+            - paragraph [ref=f2e210]: Failed
+            - paragraph [ref=f2e211]: "0"
+          - generic [ref=f2e212]:
+            - paragraph [ref=f2e213]: Last Active
+            - paragraph [ref=f2e214]: less than a minute ago

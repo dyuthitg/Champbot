@@ -1,0 +1,8 @@
+- generic [ref=f16e2]:
+  - heading "Account" [level=1] [ref=f16e3]
+  - paragraph [ref=f16e4]: Who this browser is signed in as, and a way out.
+  - generic [ref=f16e5]:
+    - generic [ref=f16e10]:
+      - generic [ref=f16e11]: a.very.long.operator.email.address.for.testing@championsmail.com
+      - generic [ref=f16e12]: Signed in
+    - button "Sign out" [ref=f16e15] [cursor=pointer]

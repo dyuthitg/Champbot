@@ -1,0 +1,51 @@
+- generic [ref=f24e3]:
+  - navigation [ref=f24e4]:
+    - generic [ref=f24e6]:
+      - link "Social Bot" [ref=f24e7] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f24e9]:
+        - link "Overview" [ref=f24e10] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Approvals" [ref=f24e18] [cursor=pointer]:
+          - /url: /approvals
+        - link "Warm-up" [ref=f24e24] [cursor=pointer]:
+          - /url: /warmup
+        - link "Targeting" [ref=f24e29] [cursor=pointer]:
+          - /url: /targeting
+        - link "Accounts" [ref=f24e36] [cursor=pointer]:
+          - /url: /accounts
+        - link "Campaigns" [ref=f24e44] [cursor=pointer]:
+          - /url: /campaigns
+        - link "Agents" [ref=f24e50] [cursor=pointer]:
+          - /url: /agents
+        - link "Account" [ref=f24e55] [cursor=pointer]:
+          - /url: /account
+  - generic [ref=f24e62]:
+    - generic [ref=f24e63]:
+      - button "Back to Campaigns" [ref=f24e64] [cursor=pointer]
+      - heading "Create New Campaign" [level=1] [ref=f24e67]
+      - paragraph [ref=f24e68]: Set up your LinkedIn automation campaign in a few steps
+    - generic [ref=f24e70]:
+      - generic [ref=f24e78]:
+        - paragraph [ref=f24e79]: Basic Info
+        - paragraph [ref=f24e80]: Campaign name and description
+      - generic [ref=f24e91]:
+        - paragraph [ref=f24e92]: Target URLs
+        - paragraph [ref=f24e93]: LinkedIn profiles or posts
+      - generic [ref=f24e103]:
+        - paragraph [ref=f24e104]: Actions
+        - paragraph [ref=f24e105]: Choose automation actions
+      - generic [ref=f24e114]:
+        - paragraph [ref=f24e115]: Schedule
+        - paragraph [ref=f24e116]: Set priority and timing
+    - generic [ref=f24e119]:
+      - generic [ref=f24e120]:
+        - generic [ref=f24e121]: Campaign Name *
+        - textbox "e.g., Tech Industry Outreach Q1 2024" [ref=f24e122]
+      - generic [ref=f24e123]:
+        - generic [ref=f24e124]: Description *
+        - textbox "Describe your campaign goals and target audience..." [ref=f24e125]
+      - generic [ref=f24e126]:
+        - generic [ref=f24e127]: Run on which account(s)? *
+        - paragraph [ref=f24e128]: Loading connected accounts…
+    - button "Next" [disabled] [ref=f24e130]

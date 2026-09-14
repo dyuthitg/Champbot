@@ -59,7 +59,7 @@ export function Accounts() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <header className="flex items-start justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">Accounts</h1>
+          <h1 className="text-2xl font-semibold text-slate-100">LinkedIn Accounts</h1>
           <p className="text-slate-400 mt-1">
             The LinkedIn identities this system acts as.
           </p>

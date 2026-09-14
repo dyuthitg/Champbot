@@ -5,6 +5,7 @@ import { Account } from './pages/Account';
 import { Accounts } from './pages/Accounts';
 import { AgentMonitor } from './pages/AgentMonitor';
 import { Approvals } from './pages/Approvals';
+import { CampaignDetail } from './pages/CampaignDetail';
 import { CampaignList } from './pages/CampaignList';
 import { CreateCampaign } from './pages/CreateCampaign';
 import { Dashboard } from './pages/Dashboard';
@@ -58,6 +59,7 @@ function AnimatedRoutes() {
         <Route path="/targeting" element={<Page><Targeting /></Page>} />
         <Route path="/campaigns" element={<Page><CampaignList /></Page>} />
         <Route path="/campaigns/new" element={<Page><CreateCampaign /></Page>} />
+        <Route path="/campaigns/:id" element={<Page><CampaignDetail /></Page>} />
         <Route path="/agents" element={<Page><AgentMonitor /></Page>} />
         <Route path="/account" element={<Page><Account /></Page>} />
         {/* Catch-all redirect */}

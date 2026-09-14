@@ -1,0 +1,27 @@
+- generic [ref=f9e3]:
+  - navigation [ref=f9e4]:
+    - generic [ref=f9e6]:
+      - link "Social Bot" [ref=f9e7] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f9e9]:
+        - link "Overview" [ref=f9e10] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Approvals" [ref=f9e18] [cursor=pointer]:
+          - /url: /approvals
+        - link "Warm-up" [ref=f9e24] [cursor=pointer]:
+          - /url: /warmup
+        - link "Targeting" [ref=f9e29] [cursor=pointer]:
+          - /url: /targeting
+        - link "Accounts" [ref=f9e36] [cursor=pointer]:
+          - /url: /accounts
+        - link "Campaigns" [ref=f9e44] [cursor=pointer]:
+          - /url: /campaigns
+        - link "Agents" [ref=f9e50] [cursor=pointer]:
+          - /url: /agents
+        - link "Account" [ref=f9e55] [cursor=pointer]:
+          - /url: /account
+  - banner [ref=f9e63]:
+    - generic [ref=f9e64]:
+      - heading "Targeting" [level=1] [ref=f9e65]
+      - paragraph [ref=f9e66]: Who is worth talking to — and just as importantly, who isn't.
+    - button "New target profile" [ref=f9e67] [cursor=pointer]

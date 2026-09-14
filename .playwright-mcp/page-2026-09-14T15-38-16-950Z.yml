@@ -1,0 +1,16 @@
+- generic [active] [ref=f17e1]:
+  - heading "AccountRow, long name+headline, 375px" [level=2] [ref=f17e2]
+  - generic [ref=f17e4]:
+    - generic [ref=f17e5]:
+      - generic [ref=f17e6]:
+        - heading "Priyanka Venkataraman-Fitzgerald" [level=3] [ref=f17e7]
+        - generic [ref=f17e8]: Connected
+        - generic [ref=f17e9]: warming up
+      - paragraph [ref=f17e10]: Senior Director of Strategic Partnerships & Growth, EMEA region
+    - generic [ref=f17e11]:
+      - button "Verify" [ref=f17e12] [cursor=pointer]
+      - button [ref=f17e17] [cursor=pointer]
+  - heading "ConnectForm submit row, 375px" [level=2] [ref=f17e20]
+  - generic [ref=f17e21]:
+    - button "Connect & verify" [ref=f17e22] [cursor=pointer]
+    - generic [ref=f17e25]: "New accounts start in warm-up: reduced volume for the first weeks."

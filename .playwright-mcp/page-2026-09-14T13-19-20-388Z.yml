@@ -1,0 +1,23 @@
+- generic [ref=f8e3]:
+  - navigation [ref=f8e4]:
+    - generic [ref=f8e6]:
+      - link "Social Bot" [ref=f8e7] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f8e9]:
+        - link "Overview" [ref=f8e10] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Approvals" [ref=f8e18] [cursor=pointer]:
+          - /url: /approvals
+        - link "Warm-up" [ref=f8e24] [cursor=pointer]:
+          - /url: /warmup
+        - link "Targeting" [ref=f8e29] [cursor=pointer]:
+          - /url: /targeting
+        - link "Accounts" [ref=f8e36] [cursor=pointer]:
+          - /url: /accounts
+        - link "Campaigns" [ref=f8e44] [cursor=pointer]:
+          - /url: /campaigns
+        - link "Agents" [ref=f8e50] [cursor=pointer]:
+          - /url: /agents
+        - link "Account" [ref=f8e55] [cursor=pointer]:
+          - /url: /account
+  - paragraph [ref=f8e67]: Loading agent activity...

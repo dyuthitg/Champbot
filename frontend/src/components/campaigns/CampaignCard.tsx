@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { motion } from 'framer-motion';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -36,7 +37,15 @@ const statusConfig = {
   cancelled: { dot: 'bg-slate-500', border: 'border-border' },
 };
 
-export function CampaignCard({ campaign }: CampaignCardProps) {
+// forwardRef because AnimatePresence's popLayout exit animation clones this
+// component's direct child and attaches a ref to it for measurement -- a
+// plain function component can't take one, which surfaced as a silent
+// "Function components cannot be given refs" console warning (exit
+// animations for removed cards likely weren't measuring correctly).
+export const CampaignCard = forwardRef<HTMLDivElement, CampaignCardProps>(function CampaignCard(
+  { campaign },
+  ref,
+) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const reduced = prefersReducedMotion();
@@ -75,6 +84,7 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
 
   return (
     <motion.div
+      ref={ref}
       layout
       layoutId={`campaign-${campaign.id}`}
       initial={reduced ? undefined : { opacity: 0, y: 20 }}
@@ -257,7 +267,9 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
       </motion.button>
     </motion.div>
   );
-}
+});
+
+CampaignCard.displayName = 'CampaignCard';
 
 interface StatItemProps {
   icon: React.ReactNode;
