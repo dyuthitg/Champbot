@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,8 +17,8 @@ import {
   Share2,
   UserPlus,
 } from 'lucide-react';
-import { campaignApi } from '@/lib/api';
-import type { CampaignCreate } from '@/types';
+import { accountApi, campaignApi } from '@/lib/api';
+import type { CampaignCreate, ConnectedAccount } from '@/types';
 import { clsx } from 'clsx';
 
 const prefersReducedMotion = () =>
@@ -74,11 +74,16 @@ export function CreateCampaign() {
   const [direction, setDirection] = useState(1);
   const reduced = prefersReducedMotion();
 
+  const { data: accounts = [], isLoading: accountsLoading } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: accountApi.list,
+  });
+
   const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
     target_urls: [],
-    account_ids: ['default-account'], // TODO: Fetch actual accounts
+    account_ids: [],
     actions: {
       like: true,
       comment: false,
@@ -117,7 +122,11 @@ export function CreateCampaign() {
   const isStepValid = () => {
     switch (currentStep) {
       case 1:
-        return formData.name.trim() !== '' && formData.description.trim() !== '';
+        return (
+          formData.name.trim() !== '' &&
+          formData.description.trim() !== '' &&
+          formData.account_ids.length > 0
+        );
       case 2:
         return formData.target_urls.length > 0;
       case 3:
@@ -232,7 +241,12 @@ export function CreateCampaign() {
             transition={{ type: 'tween', duration: reduced ? 0 : 0.3 }}
           >
             {currentStep === 1 && (
-              <Step1BasicInfo formData={formData} setFormData={setFormData} />
+              <Step1BasicInfo
+                formData={formData}
+                setFormData={setFormData}
+                accounts={accounts}
+                accountsLoading={accountsLoading}
+              />
             )}
             {currentStep === 2 && (
               <Step2TargetURLs formData={formData} setFormData={setFormData} reduced={reduced} />
@@ -241,7 +255,12 @@ export function CreateCampaign() {
               <Step3Actions formData={formData} setFormData={setFormData} reduced={reduced} />
             )}
             {currentStep === 4 && (
-              <Step4Schedule formData={formData} setFormData={setFormData} reduced={reduced} />
+              <Step4Schedule
+                formData={formData}
+                setFormData={setFormData}
+                reduced={reduced}
+                accounts={accounts}
+              />
             )}
           </motion.div>
         </AnimatePresence>
@@ -318,10 +337,23 @@ export function CreateCampaign() {
 function Step1BasicInfo({
   formData,
   setFormData,
+  accounts,
+  accountsLoading,
 }: {
   formData: FormData;
   setFormData: (data: FormData) => void;
+  accounts: ConnectedAccount[];
+  accountsLoading: boolean;
 }) {
+  const toggleAccount = (id: string) => {
+    setFormData({
+      ...formData,
+      account_ids: formData.account_ids.includes(id)
+        ? formData.account_ids.filter((a) => a !== id)
+        : [...formData.account_ids, id],
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -350,6 +382,57 @@ function Step1BasicInfo({
           rows={6}
           className="input w-full py-3 resize-none"
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-muted mb-2">
+          Run on which account(s)? *
+        </label>
+        {accountsLoading ? (
+          <p className="text-sm text-muted">Loading connected accounts…</p>
+        ) : accounts.length === 0 ? (
+          <p className="text-sm text-muted">
+            No LinkedIn accounts connected yet.{' '}
+            <Link to="/accounts" className="text-accent hover:underline">
+              Connect one
+            </Link>{' '}
+            before creating a campaign.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {accounts.map((account) => {
+              const checked = formData.account_ids.includes(account.id);
+              return (
+                <label
+                  key={account.id}
+                  className={clsx(
+                    'flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors min-h-[44px]',
+                    checked
+                      ? 'border-accent bg-accent/10'
+                      : 'border-border bg-slate-900/40 hover:border-slate-600',
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleAccount(account.id)}
+                    className="shrink-0 w-4 h-4 accent-accent"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="text-sm font-medium text-foreground truncate block">
+                      {account.display_name ?? 'Unnamed account'}
+                    </span>
+                    {account.headline && (
+                      <span className="text-xs text-muted truncate block">
+                        {account.headline}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -563,10 +646,12 @@ function Step4Schedule({
   formData,
   setFormData,
   reduced,
+  accounts,
 }: {
   formData: FormData;
   setFormData: (data: FormData) => void;
   reduced: boolean;
+  accounts: ConnectedAccount[];
 }) {
   const priorities = [
     { value: 1, label: 'Low', description: 'Run when resources available' },
@@ -631,6 +716,15 @@ function Step4Schedule({
           <div className="flex justify-between gap-3">
             <span className="text-muted">Name:</span>
             <span className="font-medium text-foreground truncate">{formData.name || '-'}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-muted shrink-0">Account(s):</span>
+            <span className="font-medium text-foreground text-right truncate">
+              {accounts
+                .filter((a) => formData.account_ids.includes(a.id))
+                .map((a) => a.display_name ?? 'Unnamed account')
+                .join(', ') || '-'}
+            </span>
           </div>
           <div className="flex justify-between gap-3">
             <span className="text-muted">Target URLs:</span>
