@@ -196,3 +196,10 @@ frontend/node_modules/
 
 test_campaigns.db
 *.db
+
+# Claude-in-Chrome / Playwright MCP scratch output -- screenshots and page
+# dumps from live-verification during development, not project artifacts.
+# A prior commit swept the whole directory in by accident; see the commit
+# that added this line for the cleanup.
+.playwright-mcp/
+targeting-page.png
