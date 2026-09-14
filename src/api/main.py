@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api import realtime
 from src.api.routes import (
     accounts,
     agents,
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
     """
     app.state.redis = None
     app.state.task_orchestrator = None
+    app.state.realtime_forwarder = None
 
     # Local convenience only: build the schema straight from the models.
     #
@@ -75,6 +77,9 @@ async def lifespan(app: FastAPI):
         await client.ping()
         app.state.redis = client
         app.state.task_orchestrator = MessageOrchestrator(client)
+        app.state.realtime_forwarder = asyncio.create_task(
+            realtime.redis_forwarder(client)
+        )
         logger.info("Connected to Redis; task bridge active")
     except Exception as exc:  # pragma: no cover - depends on runtime env
         logger.warning("Redis unavailable (%s); campaign execution degraded", exc)
@@ -96,6 +101,11 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        forwarder = getattr(app.state, "realtime_forwarder", None)
+        if forwarder is not None:
+            forwarder.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await forwarder
         task = getattr(app.state, "scheduler_task", None)
         if task is not None:
             task.cancel()
@@ -164,6 +174,13 @@ app.include_router(accounts.router, prefix=API_V1_PREFIX)
 app.include_router(targeting.router, prefix=API_V1_PREFIX)
 app.include_router(outreach.router, prefix=API_V1_PREFIX)
 app.include_router(warmup.router, prefix=API_V1_PREFIX)
+
+# Real-time update streams. Mounted at the root (not under /api/v1) because
+# the SPA connects to `ws://host/ws/updates` directly.
+app.add_api_websocket_route("/ws/updates", realtime.websocket_updates)
+app.add_api_websocket_route(
+    "/ws/campaigns/{campaign_id}", realtime.websocket_campaign
+)
 
 
 @app.get("/healthz", tags=["system"])

@@ -36,6 +36,7 @@ from src.api.middleware.idempotency import (
     require_idempotency_key,
 )
 from src.api.middleware.clerk import RequestContext, get_request_context
+from src.api import realtime
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -92,7 +93,11 @@ async def create_campaign(
     """
     try:
         campaign = await service.create_campaign(campaign_in, idempotency_key)
-        return service.to_response(campaign)
+        resp = service.to_response(campaign)
+        await realtime.broadcast_campaign(
+            "CAMPAIGN_UPDATE", str(campaign.id), data={"status": campaign.status}
+        )
+        return resp
     except IdempotencyKeyExistsError as e:
         # Return cached response for idempotent replay
         existing = await service.get_campaign(e.resource_id)
@@ -164,6 +169,9 @@ async def update_campaign(
     """
     try:
         campaign = await service.update_campaign(campaign_id, campaign_update)
+        await realtime.broadcast_campaign(
+            "CAMPAIGN_UPDATE", str(campaign_id), data={"status": campaign.status}
+        )
         return service.to_response(campaign)
     except CampaignNotFoundError:
         raise HTTPException(
@@ -223,6 +231,11 @@ async def start_campaign(
     """
     try:
         result = await service.start_campaign(campaign_id, idempotency_key)
+        await realtime.broadcast_campaign(
+            "CAMPAIGN_UPDATE",
+            str(campaign_id),
+            data={"status": result.status},
+        )
         return result
     except CampaignNotFoundError:
         raise HTTPException(
@@ -253,6 +266,9 @@ async def pause_campaign(
     """
     try:
         campaign = await service.pause_campaign(campaign_id, idempotency_key)
+        await realtime.broadcast_campaign(
+            "CAMPAIGN_UPDATE", str(campaign_id), data={"status": campaign.status}
+        )
         return service.to_response(campaign)
     except CampaignNotFoundError:
         raise HTTPException(
