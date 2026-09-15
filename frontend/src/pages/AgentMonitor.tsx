@@ -1,17 +1,25 @@
+// What's actually happening behind the scenes, in plain terms.
+//
+// "Agent" is our internal word for a piece of the automation; nobody using
+// this screen should have to learn it. Every card leads with what that part
+// does for you, not with its internal name -- and the page as a whole leads
+// with one question: is everything okay right now, or does something need
+// me?
+
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import gsap from 'gsap';
 import {
-  Activity,
+  AlertTriangle,
   CheckCircle2,
-  XCircle,
   Clock,
-  Zap,
-  Shield,
-  MessageSquare,
   Eye,
+  MessageSquare,
+  Shield,
+  ShieldCheck,
   UserCheck,
+  Zap,
 } from 'lucide-react';
 import { agentApi } from '@/lib/api';
 import { useGeneralWebSocket } from '@/hooks/useWebSocket';
@@ -19,7 +27,7 @@ import type { Agent, AgentStatus } from '@/types';
 import { clsx } from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
 
-const agentIcons = {
+const AGENT_ICON: Record<Agent['type'], typeof Zap> = {
   account_manager: UserCheck,
   content_analysis: Eye,
   interaction: Zap,
@@ -27,12 +35,21 @@ const agentIcons = {
   safety: Shield,
 };
 
-const agentColors = {
-  account_manager: 'from-blue-500 to-blue-600',
-  content_analysis: 'from-purple-500 to-purple-600',
-  interaction: 'from-green-500 to-green-600',
-  conversation: 'from-orange-500 to-orange-600',
-  safety: 'from-red-500 to-red-600',
+// What each part actually does, in words a non-technical owner would use --
+// the API only gives us a short internal name ("Content Analysis").
+const AGENT_DESCRIPTION: Record<Agent['type'], string> = {
+  account_manager: 'Keeps your connected LinkedIn accounts logged in and healthy.',
+  content_analysis: "Reads people's profiles and posts to judge who's worth reaching out to.",
+  interaction: 'Sends the likes, connection requests, and comments on your behalf.',
+  conversation: 'Writes and sends replies in your conversations.',
+  safety: 'Watches everything else and slows down the moment something looks risky.',
+};
+
+const STATUS_LABEL: Record<AgentStatus, string> = {
+  idle: 'Idle',
+  processing: 'Working',
+  waiting: 'Waiting',
+  error: 'Needs attention',
 };
 
 const prefersReducedMotion = () =>
@@ -43,29 +60,20 @@ export function AgentMonitor() {
   const containerRef = useRef<HTMLDivElement>(null);
   const hasEnteredRef = useRef(false);
 
-  // Connect to WebSocket for real-time updates
-  const { isConnected, lastMessage } = useGeneralWebSocket();
+  const { isConnected } = useGeneralWebSocket();
 
-  // Fetch agents
   const { data: agents, isLoading } = useQuery({
     queryKey: ['agents'],
     queryFn: agentApi.list,
-    refetchInterval: 3000, // Refetch every 3 seconds
+    refetchInterval: 3000,
   });
 
-  // GSAP: Animate page entry, exactly once -- skipped outright when the
-  // visitor's OS says reduce motion, rather than played at a shorter
-  // duration. A entrance animation isn't required to understand this
-  // screen, so the honest fix is "doesn't run," not "runs faster."
-  //
-  // `agents` is a fresh array reference on every 3-second poll even when
-  // nothing changed, and this used to depend on `agents` directly: every
-  // poll tore down the previous timeline and started a new one from
-  // opacity 0. Two polls landing close together could revert the first
-  // tween mid-flight and leave a card's opacity latched at 0 forever --
-  // the "renders a blank screen" finding in the Week 1 audit. Running once
-  // per mount (guarded by a ref, not a dependency the poll churns) is the
-  // actual fix; reduced motion was a separate, real bug hiding behind it.
+  // GSAP: reveal the cards once on mount, never on a routine poll. `agents`
+  // is a fresh array reference every 3 seconds even when nothing changed,
+  // and re-running this per poll used to tear down and restart the
+  // animation mid-flight, sometimes latching a card's opacity at 0 for
+  // good (Week 1 audit). A ref that's only set true once is what actually
+  // fixes that -- reduced motion was a separate, real bug hiding behind it.
   useEffect(() => {
     if (!containerRef.current || !agents || hasEnteredRef.current) return;
     hasEnteredRef.current = true;
@@ -73,299 +81,149 @@ export function AgentMonitor() {
 
     const ctx = gsap.context(() => {
       const tl = gsap.timeline();
-
-      // Animate header
-      tl.from('.monitor-header', {
-        y: -30,
-        opacity: 0,
-        duration: 0.6,
-        ease: 'power3.out',
-      });
-
-      // Stagger animate agent cards
+      tl.from('.monitor-header', { y: -20, opacity: 0, duration: 0.5, ease: 'power3.out' });
       tl.from(
         '.agent-card',
-        {
-          y: 50,
-          opacity: 0,
-          stagger: 0.1,
-          duration: 0.5,
-          ease: 'power2.out',
-        },
-        '-=0.3'
-      );
-
-      // Animate stats cards
-      tl.from(
-        '.stat-card',
-        {
-          scale: 0.8,
-          opacity: 0,
-          stagger: 0.1,
-          duration: 0.4,
-        },
-        '-=0.3'
+        { y: 30, opacity: 0, stagger: 0.08, duration: 0.4, ease: 'power2.out' },
+        '-=0.25',
       );
     }, containerRef);
 
     return () => ctx.revert();
   }, [agents]);
 
-  // Pulse animation for processing agents. Keyed on *which* agents are
-  // processing (a stable, comma-joined id string), not on the `agents`
-  // array reference -- so a poll that changes nothing doesn't restart the
-  // glow, but an agent actually entering/leaving "processing" does.
-  const processingKey = (agents ?? [])
-    .filter((a) => a.status === 'processing')
-    .map((a) => a.id)
-    .join(',');
+  const working = (agents ?? []).filter((a) => a.status === 'processing').length;
+  const needsAttention = (agents ?? []).filter((a) => a.status === 'error').length;
+  const completedTotal = (agents ?? []).reduce((sum, a) => sum + a.tasks_completed, 0);
 
-  useEffect(() => {
-    if (!containerRef.current || !processingKey || prefersReducedMotion()) return;
-
-    const ctx = gsap.context(() => {
-      gsap.to('.agent-card.processing', {
-        boxShadow: '0 0 25px rgba(168, 85, 247, 0.35)',
-        duration: 1.5,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      });
-    }, containerRef);
-
-    return () => ctx.revert();
-  }, [processingKey]);
-
-  // Calculate stats
-  const stats = agents
-    ? {
-        total: agents.length,
-        active: agents.filter((a) => a.status === 'processing').length,
-        idle: agents.filter((a) => a.status === 'idle').length,
-        totalCompleted: agents.reduce((sum, a) => sum + a.tasks_completed, 0),
-        totalFailed: agents.reduce((sum, a) => sum + a.tasks_failed, 0),
-      }
-    : null;
-
-  if (isLoading) {
-    return <LoadingState />;
-  }
+  if (isLoading) return <LoadingState />;
 
   return (
-    <div ref={containerRef} className="max-w-7xl mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="monitor-header mb-8">
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+    <div ref={containerRef} className="max-w-5xl mx-auto px-4 py-8">
+      <div className="monitor-header mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-100 mb-2">
-              Agent Activity Monitor
-            </h1>
-            <p className="text-muted">
-              Real-time status of all automation agents
+            <h1 className="text-2xl font-semibold text-slate-100">Automation activity</h1>
+            <p className="text-slate-400 mt-1">
+              What your automation is doing right now.
               {isConnected && (
-                <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">
-                  <motion.span
-                    className="w-2 h-2 bg-success-fg rounded-full"
-                    animate={
-                      prefersReducedMotion()
-                        ? undefined
-                        : {
-                            opacity: [1, 0.3, 1],
-                            transition: { duration: 2, repeat: Infinity },
-                          }
-                    }
-                  />
+                <span className="ml-2 inline-flex items-center gap-1.5 text-sm text-success-fg">
+                  <span className="w-1.5 h-1.5 rounded-full bg-success-fg" />
                   Live
                 </span>
               )}
             </p>
           </div>
-
-          <motion.div
-            animate={prefersReducedMotion() ? undefined : { rotate: 360 }}
-            transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
-            className="text-accent"
-          >
-            <Activity size={40} />
-          </motion.div>
         </div>
 
-        {/* Stats Cards */}
-        {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <StatsCard
-              label="Total Agents"
-              value={stats.total}
-              icon={<Activity size={20} />}
-              color="text-foreground"
-            />
-            <StatsCard
-              label="Active"
-              value={stats.active}
-              icon={<Zap size={20} />}
-              color="text-accent"
-            />
-            <StatsCard
-              label="Idle"
-              value={stats.idle}
-              icon={<Clock size={20} />}
-              color="text-muted"
-            />
-            <StatsCard
-              label="Completed"
-              value={stats.totalCompleted}
-              icon={<CheckCircle2 size={20} />}
-              color="text-success-fg"
-            />
-            <StatsCard
-              label="Failed"
-              value={stats.totalFailed}
-              icon={<XCircle size={20} />}
-              color="text-danger-fg"
-            />
+        {/* Headline: the one thing worth knowing at a glance. */}
+        <div
+          className={clsx(
+            'rounded-xl border p-4 flex items-start gap-3',
+            needsAttention > 0
+              ? 'bg-danger/10 border-danger/40 text-danger-fg'
+              : working > 0
+                ? 'bg-accent/10 border-accent/40 text-purple-200'
+                : 'bg-slate-800/60 border-slate-700 text-slate-300',
+          )}
+        >
+          {needsAttention > 0 ? (
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+          ) : (
+            <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+          )}
+          <div className="min-w-0">
+            <p className="font-medium">
+              {needsAttention > 0
+                ? `${needsAttention} ${needsAttention === 1 ? 'part needs' : 'parts need'} your attention`
+                : working > 0
+                  ? `Working on ${working} ${working === 1 ? 'thing' : 'things'} right now`
+                  : "Everything's idle — nothing to do at the moment"}
+            </p>
+            <p className="text-sm opacity-80 mt-0.5">
+              {completedTotal.toLocaleString()} things completed so far.
+            </p>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Agent Cards */}
-      <div className="space-y-4">
-        {agents?.map((agent) => (
+      <div className="space-y-3">
+        {(agents ?? []).map((agent) => (
           <AgentCard key={agent.id} agent={agent} />
         ))}
       </div>
 
-      {/* Message Flow Visualization */}
-      {lastMessage && (
-        <MessageNotification message={lastMessage.type} />
+      {!isLoading && (agents ?? []).length === 0 && (
+        <div className="text-center py-16">
+          <ShieldCheck className="mx-auto text-slate-600 mb-4" size={40} />
+          <h2 className="text-lg font-semibold text-slate-200">Nothing to show yet</h2>
+          <p className="text-slate-400 mt-2">
+            Once your automation starts running, its activity shows up here.
+          </p>
+        </div>
       )}
     </div>
   );
 }
 
-interface StatsCardProps {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  color: string;
-}
-
-function StatsCard({ label, value, icon, color }: StatsCardProps) {
-  const reduced = prefersReducedMotion();
-  return (
-    <motion.div
-      className="stat-card bg-surface border border-border rounded-lg p-4"
-      whileHover={reduced ? undefined : { scale: 1.05, y: -5 }}
-      transition={{ type: 'spring', stiffness: 300 }}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm text-muted">{label}</span>
-        <span className={color}>{icon}</span>
-      </div>
-      <motion.p
-        className={clsx('text-2xl font-semibold', color)}
-        initial={reduced ? undefined : { scale: 0 }}
-        animate={reduced ? undefined : { scale: 1 }}
-        transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
-      >
-        {value}
-      </motion.p>
-    </motion.div>
-  );
-}
-
-interface AgentCardProps {
-  agent: Agent;
-}
-
-function AgentCard({ agent }: AgentCardProps) {
-  const Icon = agentIcons[agent.type];
-  const gradientColor = agentColors[agent.type];
-  const reduced = prefersReducedMotion();
+function AgentCard({ agent }: { agent: Agent }) {
+  const Icon = AGENT_ICON[agent.type] ?? Zap;
+  const description = AGENT_DESCRIPTION[agent.type];
 
   return (
     <motion.div
       layout
       className={clsx(
-        'agent-card bg-surface rounded-xl p-4 sm:p-6 border',
-        agent.status === 'processing' ? 'processing border-accent/50' : 'border-border'
+        'agent-card rounded-xl border p-4 sm:p-5 bg-slate-800/60',
+        agent.status === 'error'
+          ? 'border-danger/40'
+          : agent.status === 'processing'
+            ? 'border-accent/40'
+            : 'border-slate-700',
       )}
-      whileHover={reduced ? undefined : { scale: 1.01 }}
-      transition={{ type: 'spring', stiffness: 300 }}
     >
-      <div className="flex items-start gap-4 sm:gap-6">
-        {/* Agent Icon */}
-        <motion.div
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div
           className={clsx(
-            'w-12 h-12 sm:w-16 sm:h-16 rounded-xl bg-gradient-to-br shrink-0',
-            gradientColor,
-            'flex items-center justify-center text-white'
+            'w-10 h-10 sm:w-11 sm:h-11 rounded-lg shrink-0 flex items-center justify-center',
+            agent.status === 'error'
+              ? 'bg-danger/15 text-danger-fg'
+              : agent.status === 'processing'
+                ? 'bg-accent/15 text-purple-300'
+                : 'bg-slate-700/60 text-slate-400',
           )}
-          animate={
-            agent.status === 'processing' && !reduced
-              ? {
-                  rotate: [0, 5, -5, 0],
-                  transition: { duration: 2, repeat: Infinity },
-                }
-              : {}
-          }
         >
-          <Icon size={28} />
-        </motion.div>
+          <Icon size={20} />
+        </div>
 
-        {/* Agent Info */}
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-            <h3 className="text-lg font-semibold text-foreground truncate">{agent.name}</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold text-slate-100">{agent.name}</h3>
             <StatusBadge status={agent.status} />
           </div>
+          <p className="text-sm text-slate-400 mt-0.5">{description}</p>
 
-          {agent.current_task && (
-            <div className="mb-4">
-              <p className="text-sm text-muted">Current Task:</p>
-              <p className="text-sm font-medium text-foreground">
-                {agent.current_task}
-              </p>
-            </div>
+          {agent.current_task && agent.status === 'processing' && (
+            <p className="text-sm text-purple-200 mt-2">
+              <span className="text-slate-500">Right now: </span>
+              {agent.current_task}
+            </p>
           )}
 
-          {/* Progress Bar (if processing) */}
-          {agent.status === 'processing' && (
-            <div className="mb-4">
-              <div className="h-2 bg-slate-900/70 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-gradient-to-r from-accent to-purple-600"
-                  initial={reduced ? undefined : { width: '0%' }}
-                  animate={reduced ? { width: '100%' } : { width: '100%' }}
-                  transition={
-                    reduced ? { duration: 0 } : { duration: 3, repeat: Infinity, ease: 'linear' }
-                  }
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Stats */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
-            <div>
-              <p className="text-xs text-muted">Completed</p>
-              <p className="text-lg font-bold text-success-fg">
-                {agent.tasks_completed}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted">Failed</p>
-              <p className="text-lg font-bold text-danger-fg">
-                {agent.tasks_failed}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted">Last Active</p>
-              <p className="text-lg font-bold text-foreground">
-                {formatDistanceToNow(new Date(agent.last_activity), {
-                  addSuffix: true,
-                })}
-              </p>
-            </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-slate-500">
+            <span>
+              <span className="text-slate-300 font-medium">{agent.tasks_completed}</span>{' '}
+              completed
+            </span>
+            {agent.tasks_failed > 0 && (
+              <span className="text-danger-fg">
+                <span className="font-medium">{agent.tasks_failed}</span> needed attention
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1">
+              <Clock size={12} />
+              {formatDistanceToNow(new Date(agent.last_activity), { addSuffix: true })}
+            </span>
           </div>
         </div>
       </div>
@@ -375,74 +233,31 @@ function AgentCard({ agent }: AgentCardProps) {
 
 function StatusBadge({ status }: { status: AgentStatus }) {
   const reduced = prefersReducedMotion();
-  const config = {
-    idle: {
-      bg: 'bg-slate-700/50',
-      text: 'text-muted',
-      dot: 'bg-slate-400',
-    },
-    processing: {
-      bg: 'bg-accent/15',
-      text: 'text-purple-300',
-      dot: 'bg-accent',
-    },
-    waiting: {
-      bg: 'bg-warn/15',
-      text: 'text-warn',
-      dot: 'bg-warn',
-    },
-    error: {
-      bg: 'bg-danger/10',
-      text: 'text-danger-fg',
-      dot: 'bg-danger',
-    },
-  };
-
-  const { bg, text, dot } = config[status];
+  const tone = {
+    idle: 'bg-slate-700/50 text-slate-400',
+    processing: 'bg-accent/15 text-purple-300',
+    waiting: 'bg-warn/15 text-warn',
+    error: 'bg-danger/10 text-danger-fg',
+  }[status];
+  const dot = {
+    idle: 'bg-slate-500',
+    processing: 'bg-accent',
+    waiting: 'bg-warn',
+    error: 'bg-danger',
+  }[status];
 
   return (
-    <motion.div
-      className={clsx(
-        'inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium',
-        bg,
-        text
-      )}
-      animate={
-        status === 'processing' && !reduced
-          ? {
-              scale: [1, 1.05, 1],
-              transition: { duration: 2, repeat: Infinity },
-            }
-          : {}
-      }
-    >
+    <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium', tone)}>
       <motion.span
-        className={clsx('w-2 h-2 rounded-full', dot)}
+        className={clsx('w-1.5 h-1.5 rounded-full', dot)}
         animate={
           status === 'processing' && !reduced
-            ? {
-                opacity: [1, 0.3, 1],
-                transition: { duration: 1.5, repeat: Infinity },
-              }
+            ? { opacity: [1, 0.35, 1], transition: { duration: 1.5, repeat: Infinity } }
             : {}
         }
       />
-      <span className="capitalize">{status}</span>
-    </motion.div>
-  );
-}
-
-function MessageNotification({ message }: { message: string }) {
-  const reduced = prefersReducedMotion();
-  return (
-    <motion.div
-      initial={reduced ? undefined : { opacity: 0, y: 50 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={reduced ? undefined : { opacity: 0, y: -50 }}
-      className="fixed bottom-4 right-4 bg-accent text-white px-6 py-3 rounded-lg shadow-lg"
-    >
-      <p className="text-sm font-medium">{message}</p>
-    </motion.div>
+      {STATUS_LABEL[status]}
+    </span>
   );
 }
 
@@ -454,11 +269,11 @@ function LoadingState() {
         <motion.div
           animate={reduced ? undefined : { rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="inline-block"
+          className="inline-block text-accent"
         >
-          <Activity size={48} className="text-accent" />
+          <Zap size={40} />
         </motion.div>
-        <p className="mt-4 text-muted">Loading agent activity...</p>
+        <p className="mt-4 text-slate-400">Checking on your automation...</p>
       </div>
     </div>
   );
