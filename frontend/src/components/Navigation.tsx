@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Inbox, LayoutDashboard, Target, User, Users } from 'lucide-react';
+import { Inbox, LayoutDashboard, Target, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 import { outreachApi } from '@/lib/api';
+import { AccountBadge } from './AccountBadge';
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
@@ -27,7 +28,6 @@ const navItems = [
     icon: Users,
     matches: ['/accounts', '/agents', '/warmup'],
   },
-  { path: '/account', label: 'Login Account', icon: User },
 ];
 
 export function Navigation() {
@@ -79,11 +79,9 @@ export function Navigation() {
           >
             {navItems.map((item) => {
               const Icon = item.icon;
-              // Plain startsWith made "/accounts" match the "/account" tab
-              // too -- literally, "/accounts".startsWith("/account") is
-              // true -- so both lit up together. A path boundary (exact
-              // match, or the next char is "/") is what "startsWith"
-              // actually meant here.
+              // A path boundary (exact match, or the next char is "/")
+              // rather than plain startsWith -- otherwise "/targeting-x"
+              // would light up the "/targeting" tab too.
               const isActive = (item.matches ?? [item.path]).some(
                 (p) => location.pathname === p || location.pathname.startsWith(`${p}/`),
               );
@@ -111,6 +109,8 @@ export function Navigation() {
               );
             })}
           </div>
+
+          <AccountBadge />
         </div>
       </div>
     </nav>
