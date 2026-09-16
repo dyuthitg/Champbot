@@ -130,8 +130,8 @@ dmypy.json
 
 # LinkedIn Multi-Agent System specific
 # Configuration files with sensitive data
-config/config.json
-config/production_config.json
+backend/config/config.json
+backend/config/production_config.json
 
 # Encryption keys
 .encryption_key
@@ -171,7 +171,7 @@ Thumbs.db
 .dockerignore
 
 # Kubernetes secrets
-deployment/kubernetes/secrets.yaml
+backend/deployment/kubernetes/secrets.yaml
 
 # Temporary files
 tmp/

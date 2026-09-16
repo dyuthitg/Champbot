@@ -258,12 +258,20 @@ def _mount_frontend() -> None:
     from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
 
-    dist = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
-    dist = os.path.abspath(dist)
-    index_file = os.path.join(dist, "index.html")
-    if not os.path.isdir(dist) or not os.path.isfile(index_file):
-        logger.info("Frontend build not found at %s; serving API only", dist)
+    here = os.path.dirname(__file__)
+    # In the Docker image, src/ sits directly under /app alongside frontend/
+    # (two levels up). In the repo checkout, src/ sits under backend/, one
+    # level deeper than the built container, so frontend/ is three levels up.
+    # Check both so this works whether it's running from the image or the repo.
+    candidates = [
+        os.path.join(here, "..", "..", "frontend", "dist"),
+        os.path.join(here, "..", "..", "..", "frontend", "dist"),
+    ]
+    dist = next((os.path.abspath(c) for c in candidates if os.path.isfile(os.path.join(c, "index.html"))), None)
+    if dist is None:
+        logger.info("Frontend build not found in %s; serving API only", [os.path.abspath(c) for c in candidates])
         return
+    index_file = os.path.join(dist, "index.html")
 
     assets_dir = os.path.join(dist, "assets")
     if os.path.isdir(assets_dir):
