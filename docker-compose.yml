@@ -38,7 +38,7 @@ services:
       - LINKEDIN_HEADLESS=true
       - LINKEDIN_BROWSER_TYPE=playwright
     volumes:
-      - ./config:/app/config:ro
+      - ./backend/config:/app/config:ro
       - ./data:/app/data
       - ./logs:/app/logs
       - linkedin_sessions:/app/sessions
@@ -72,7 +72,7 @@ services:
       - LINKEDIN_HEADLESS=true
       - LINKEDIN_BROWSER_TYPE=playwright
     volumes:
-      - ./config:/app/config:ro
+      - ./backend/config:/app/config:ro
       - ./data:/app/data
       - ./logs:/app/logs
       - account_sessions:/app/sessions
@@ -98,7 +98,7 @@ services:
       - LOG_LEVEL=INFO
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
-      - ./config:/app/config:ro
+      - ./backend/config:/app/config:ro
       - ./data:/app/data
       - ./logs:/app/logs
     command: ["--agents", "content_analysis"]
@@ -126,7 +126,7 @@ services:
       - LINKEDIN_HEADLESS=true
       - LINKEDIN_BROWSER_TYPE=playwright
     volumes:
-      - ./config:/app/config:ro
+      - ./backend/config:/app/config:ro
       - ./data:/app/data
       - ./logs:/app/logs
       - interaction_sessions:/app/sessions
@@ -154,7 +154,7 @@ services:
       - LOG_LEVEL=INFO
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
-      - ./config:/app/config:ro
+      - ./backend/config:/app/config:ro
       - ./data:/app/data
       - ./logs:/app/logs
     command: ["--agents", "conversation"]
@@ -178,7 +178,7 @@ services:
       - REDIS_DB=0
       - LOG_LEVEL=INFO
     volumes:
-      - ./config:/app/config:ro
+      - ./backend/config:/app/config:ro
       - ./data:/app/data
       - ./logs:/app/logs
     command: ["--agents", "safety"]
@@ -221,7 +221,7 @@ services:
       - SCHEDULER_DRY_RUN=${SCHEDULER_DRY_RUN:-false}
       - SCHEDULER_INTERVAL_SECONDS=${SCHEDULER_INTERVAL_SECONDS:-300}
     volumes:
-      - ./config:/app/config:ro
+      - ./backend/config:/app/config:ro
       - ./data:/app/data
       - ./logs:/app/logs
     command: ["python", "-m", "src.scheduler"]
@@ -245,7 +245,7 @@ services:
       - REDIS_DB=0
       - LOG_LEVEL=INFO
     volumes:
-      - ./config:/app/config:ro
+      - ./backend/config:/app/config:ro
       - ./data:/app/data
       - ./logs:/app/logs
     command: ["--agents", "analytics"]
