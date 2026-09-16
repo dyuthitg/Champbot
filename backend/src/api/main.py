@@ -157,10 +157,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS: the frontend (Vite dev server / hosted SPA) calls this API cross-origin.
+# CORS: the frontend (Vite dev server, or the separately-hosted SPA service in
+# production) calls this API cross-origin. FRONTEND_URL takes a comma-separated
+# allowlist (e.g. "https://app.example.com,http://localhost:5173"); falls back
+# to "*" so local/dev setups that never set it keep working.
+_cors_origins_env = os.getenv("FRONTEND_URL", "").strip()
+_cors_origins = (
+    [origin.strip() for origin in _cors_origins_env.split(",") if origin.strip()]
+    if _cors_origins_env
+    else ["*"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tightened to the configured frontend origin in Phase 1
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
