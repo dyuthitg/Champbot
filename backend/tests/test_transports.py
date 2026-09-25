@@ -287,6 +287,57 @@ async def test_fetch_activity_unavailable_when_all_shapes_fail():
     assert "legacy-profileUpdatesV2" in str(excinfo.value)
 
 
+async def test_fetch_inbox_uses_no_keyversion_shape_first():
+    session = FakeVoyagerSession(
+        [("/messaging/conversations", FakeResponse(body={"elements": [{"id": 1}]}))]
+    )
+    mobile = MobileAPITransport(session_factory=lambda acct: session)
+
+    result = await mobile.fetch_inbox(_account())
+
+    assert result.success
+    assert result.detail["shape"] == "no-keyVersion"
+    assert result.detail["conversations"] == [{"id": 1}]
+    assert "keyVersion" not in session.urls[0]
+
+
+async def test_fetch_inbox_retries_transient_500_then_falls_back_to_legacy(monkeypatch):
+    monkeypatch.setattr(
+        "src.infrastructure.transports.mobile._INBOX_RETRY_DELAY_SECONDS", 0
+    )
+    # Order matters: the legacy URL also contains "/messaging/conversations",
+    # so the more specific route must be checked first (same trick the
+    # existing fetch_profile fallback test uses).
+    session = FakeVoyagerSession(
+        [
+            ("keyVersion=LEGACY_INBOX", FakeResponse(body={"elements": [{"id": 2}]})),
+            ("/messaging/conversations", FakeResponse(status_code=500, body={})),
+        ]
+    )
+    mobile = MobileAPITransport(session_factory=lambda acct: session)
+
+    result = await mobile.fetch_inbox(_account())
+
+    assert result.success
+    assert result.detail["shape"] == "legacy-keyVersion"
+    assert result.detail["conversations"] == [{"id": 2}]
+    # One retry on the failing shape (2 calls) + one call that succeeds.
+    assert len(session.urls) == 3
+
+
+async def test_fetch_inbox_does_not_retry_a_plain_4xx():
+    session = FakeVoyagerSession([])  # everything 404s
+    mobile = MobileAPITransport(session_factory=lambda acct: session)
+
+    with pytest.raises(TransportUnavailable) as excinfo:
+        await mobile.fetch_inbox(_account())
+
+    assert "no-keyVersion" in str(excinfo.value)
+    assert "legacy-keyVersion" in str(excinfo.value)
+    # No retries on a 4xx: exactly one call per shape.
+    assert len(session.urls) == 2
+
+
 # --- Playwright executor adapter ---
 
 class FakeExecutor:

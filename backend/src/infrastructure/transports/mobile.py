@@ -45,6 +45,10 @@ logger = logging.getLogger(__name__)
 
 VOYAGER_BASE = "https://www.linkedin.com/voyager/api"
 
+# Backoff before retrying a transient-5xx on fetch_inbox's single retry.
+# A module-level constant (not inlined) so tests can monkeypatch it to 0.
+_INBOX_RETRY_DELAY_SECONDS = 1.5
+
 # Voyager rejects requests that don't look like a first-party client.
 _BASE_HEADERS = {
     "accept": "application/vnd.linkedin.normalized+json+2.1",
@@ -625,19 +629,63 @@ class MobileAPITransport:
         )
 
     async def fetch_inbox(self, account: Any, since: Any = None) -> TransportResult:
-        """Fetch recent conversations."""
-        path = "/messaging/conversations?keyVersion=LEGACY_INBOX"
-        if since:
-            path += f"&createdBefore={int(since)}"
-        status, body = await self._request(account, "GET", path)
-        if not self._ok(status):
-            raise TransportUnavailable(f"fetch_inbox returned HTTP {status}")
-        return TransportResult(
-            success=True,
-            action="fetch_inbox",
-            via=self.name,
-            detail={"conversations": (body or {}).get("elements", [])},
-        )
+        """
+        Fetch recent conversations.
+
+        Unlike every other read in this class, this used to try exactly one
+        endpoint shape with no fallback -- a real gap, found live (2026-09-25)
+        when a real account's fetch_inbox came back HTTP 500 with no working
+        backup, silently taking reply detection down. Brought in line with the
+        pattern the rest of this file already uses: the plain path (no
+        ``keyVersion``) is the candidate current shape -- LinkedIn's own web
+        client no longer sends this param on most sessions, but this hasn't
+        been confirmed against a live session, so treat it as unverified until
+        someone re-runs ``validate_account.py`` against a real account and
+        checks which shape actually answered (see the ``shape`` field in the
+        preflight detail). The original ``keyVersion=LEGACY_INBOX`` path is
+        kept exactly as it was, as the fallback, so nothing regresses even if
+        the new first shape is wrong.
+
+        A single 500 also used to be treated the same as a genuinely wrong
+        endpoint. Voyager blips transiently sometimes without the shape being
+        wrong at all, so each shape gets one retry after a short backoff
+        before being counted as failed -- safe here specifically because this
+        is a read, not a write; the same retry must not be added to
+        ``_try_shapes`` itself, since that's shared with actions like
+        ``connect``/``message``/``comment`` where retrying a 500 risks
+        double-sending something that actually went through the first time.
+        """
+        suffix = f"&createdBefore={int(since)}" if since else ""
+        shapes = [
+            ("no-keyVersion", "GET", f"/messaging/conversations?{suffix.lstrip('&')}" if suffix else "/messaging/conversations"),
+            ("legacy-keyVersion", "GET", f"/messaging/conversations?keyVersion=LEGACY_INBOX{suffix}"),
+        ]
+
+        errors = []
+        for label, method, path in shapes:
+            status, body = None, None
+            for attempt in range(2):  # one retry, transient-5xx only
+                try:
+                    status, body = await self._request(account, method, path)
+                except TransportUnavailable as exc:
+                    errors.append(f"{label}: {exc}")
+                    status = None
+                    break
+                if self._ok(status) or status < 500 or attempt == 1:
+                    break
+                await asyncio.sleep(_INBOX_RETRY_DELAY_SECONDS)
+            if status is None:
+                continue
+            if self._ok(status):
+                return TransportResult(
+                    success=True,
+                    action="fetch_inbox",
+                    via=self.name,
+                    detail={"shape": label, "conversations": (body or {}).get("elements", [])},
+                )
+            errors.append(f"{label}: HTTP {status}")
+
+        raise TransportUnavailable(f"fetch_inbox failed on all voyager shapes: {'; '.join(errors)}")
 
 
 # ----------------------------------------------------------------------

@@ -26,6 +26,23 @@ from src.infrastructure.transports.playwright import PlaywrightTransport
 
 _FALLBACK_ON = (TransportUnavailable, TransportChallenge)
 
+# Lazily-constructed, process-wide default executor: real chromium, launched
+# on first actual use (constructing it here does nothing eager). Explicit
+# `playwright_executor=` on get_transport() always overrides this -- tests do
+# this to inject a fake. Before this existed, every caller left the fallback
+# executor as None, so Playwright never actually worked as a backup for
+# anyone -- see playwright_executor.py's module docstring for why.
+_default_browser_executor = None
+
+
+def _get_default_browser_executor():
+    global _default_browser_executor
+    if _default_browser_executor is None:
+        from src.infrastructure.transports.playwright_executor import BrowserExecutor
+
+        _default_browser_executor = BrowserExecutor()
+    return _default_browser_executor
+
 
 class CompositeTransport:
     """Routes an action to ``primary`` first, falling back to ``fallback``."""
@@ -124,8 +141,17 @@ def get_transport(
 
     Honors ``MOBILE_TRANSPORT_ENABLED`` (default true). When disabled, returns a
     Playwright-only transport so operators can pin to the browser path.
+
+    ``playwright_executor`` defaults to a shared, real ``BrowserExecutor`` (a
+    real chromium instance, launched lazily on first use) rather than
+    ``None`` -- pass an explicit executor (fake or real) to override, which
+    is what tests do. Only ``like``/``comment`` actually work through it
+    today; see ``playwright_executor.py``'s module docstring for the honest
+    reason ``follow``/``connect``/the ``fetch_*`` reads don't.
     """
     mobile_enabled = os.getenv("MOBILE_TRANSPORT_ENABLED", "true").lower() != "false"
+    if playwright_executor is None:
+        playwright_executor = _get_default_browser_executor()
     playwright = PlaywrightTransport(executor=playwright_executor)
 
     if not mobile_enabled:
