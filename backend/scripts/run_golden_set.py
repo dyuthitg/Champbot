@@ -44,8 +44,11 @@ from types import SimpleNamespace
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-GOLDEN_CSV = REPO / "docs" / "golden_set" / "golden_set.csv"
-OUT_DIR = REPO / "docs" / "golden_set"
+# docs/ stayed at the repo root when this project split into frontend/ and
+# backend/ (2026-09-16); REPO here is backend/, one level below that.
+ROOT = REPO.parent
+GOLDEN_CSV = ROOT / "docs" / "golden_set" / "golden_set.csv"
+OUT_DIR = ROOT / "docs" / "golden_set"
 
 _CELEBRATORY = [
     "congrat", "exciting", "amazing", "awesome", "thrilled for you",
