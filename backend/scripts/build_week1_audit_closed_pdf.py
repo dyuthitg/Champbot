@@ -1,5 +1,5 @@
 """
-Generates Week1_UI_Audit_Closed.pdf -- the Aug 26 Operator UI Audit, reopened
+Generates Sep14_UI_Audit_Closed.pdf -- the Aug 26 Operator UI Audit, reopened
 and closed. Every line from that audit gets a status and, where it's still
 open, one sentence for why. Plus what shipped alongside it today: a
 responsive pass at 860/540px, keyboard and focus states everywhere, and
@@ -30,7 +30,7 @@ from reportlab.platypus import (
 )
 
 IMG_DIR = os.path.join(os.path.dirname(__file__), "..", ".playwright-mcp")
-OUT_PATH = "Week1_UI_Audit_Closed.pdf"
+OUT_PATH = "Sep14_UI_Audit_Closed.pdf"
 
 NAVY = colors.HexColor("#2f3b52")
 ACCENT = colors.HexColor("#c85a24")

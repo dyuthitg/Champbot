@@ -1,5 +1,5 @@
 """
-Generates Month1_Review_And_Month2_Proposal.pdf -- the Sep 18 brief:
+Generates Sep18_Month1_Review_And_Month2_Proposal.pdf -- the Sep 18 brief:
 demo outline, real before/after quality numbers, an honest "is it live"
 answer, a retro, and one Month 2 recommendation (not a menu).
 
@@ -20,7 +20,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-OUT_PATH = "Month1_Review_And_Month2_Proposal.pdf"
+OUT_PATH = "Sep18_Month1_Review_And_Month2_Proposal.pdf"
 
 MUTED = colors.HexColor("#6b6b6b")
 INK = colors.HexColor("#1a1a1a")

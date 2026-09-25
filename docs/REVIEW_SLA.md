@@ -23,7 +23,7 @@ There is currently **one reviewer: Dyuthi.** No second approver is provisioned t
 
 - **Planned covering reviewer:** none yet. This needs a name before the pilot widens past one account (Section 6 of `Week3_And_Go_Live_Checklist.pdf` already requires 100% human review with no exceptions — a gap in coverage is a gap in that rule, not a separate problem).
 - **Until a second reviewer exists:** if I'm out for more than one business day, the queue holds — nothing auto-approves, nothing gets waved through by someone unfamiliar with the flag table. A held queue is the safe failure mode; an unreviewed send is not.
-- **Action owed before Month 2:** propose a second reviewer and have them shadow one real session (same shape as the Sep 15 dry run) before they're trusted solo. Tracked in the Month 2 proposal (`Month1_Review_And_Month2_Proposal.pdf`).
+- **Action owed before Month 2:** propose a second reviewer and have them shadow one real session (same shape as the Sep 15 dry run) before they're trusted solo. Tracked in the Month 2 proposal (`Sep18_Month1_Review_And_Month2_Proposal.pdf`).
 
 ## 3. Escalation path
 
