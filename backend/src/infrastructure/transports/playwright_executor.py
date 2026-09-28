@@ -47,11 +47,23 @@ selector list below the same way ``GQL_PROFILE_RESOLVE_QUERY`` in
 ``mobile.py`` treats its captured query hash: current as of when it was
 written, needs re-confirming against a live session before anyone trusts it
 in a real go-live run.
+
+Proxy: ``_new_page`` now routes the browser context through
+``account.proxy["url"]`` when one is set, same as ``mobile.py``'s
+``build_session``. Before this, binding a real executor (above) meant a
+mobile->Playwright fallback silently sent the account's li_at cookie from a
+different IP than its normal traffic -- undetectable until it triggered a
+LinkedIn checkpoint. Full device-fingerprint parity with the mobile
+transport (TLS impersonation, native-app user-agent) is NOT attempted here
+and can't be: this is a real browser rendering real pages, not an
+impersonated HTTP client, so the two will never look identical to LinkedIn.
+The proxy match is the one piece that generalizes across both.
 """
 
 from __future__ import annotations
 
 import random
+import urllib.parse
 from typing import Any, Optional
 
 from src.infrastructure.transports.base import TransportResult, TransportUnavailable
@@ -84,6 +96,24 @@ _POST_BUTTON_SELECTORS = [
     'button.comment-button[type="submit"]',
     'button:has-text("Post")',
 ]
+
+
+def _playwright_proxy(url: str) -> dict:
+    """
+    Convert a ``account.proxy["url"]`` string (the same value ``mobile.py``
+    hands straight to ``curl_cffi`` as ``http://user:pass@host:port``) into
+    Playwright's ``new_context(proxy=...)`` shape, which wants credentials
+    split out of the server URL rather than embedded in it.
+    """
+    parsed = urllib.parse.urlsplit(url)
+    host = parsed.hostname or ""
+    server_netloc = f"{host}:{parsed.port}" if parsed.port else host
+    proxy = {"server": f"{parsed.scheme or 'http'}://{server_netloc}"}
+    if parsed.username:
+        proxy["username"] = urllib.parse.unquote(parsed.username)
+    if parsed.password:
+        proxy["password"] = urllib.parse.unquote(parsed.password)
+    return proxy
 
 
 def _activity_url(activity_urn: str) -> str:
@@ -152,7 +182,17 @@ class BrowserExecutor:
         if not creds.get("li_at"):
             raise TransportUnavailable("account has no li_at session cookie")
 
-        context = await browser.new_context(viewport={"width": 1920, "height": 1080})
+        context_kwargs: dict = {"viewport": {"width": 1920, "height": 1080}}
+        proxy = getattr(account, "proxy", None)
+        if proxy and isinstance(proxy, dict) and proxy.get("url"):
+            # Mirror mobile.py's build_session: same account, same li_at
+            # cookie, same proxy. Without this, a mobile->Playwright fallback
+            # hits LinkedIn from a completely different IP than the account's
+            # normal traffic on the same session -- exactly the mismatch
+            # LinkedIn's fraud detection watches for.
+            context_kwargs["proxy"] = _playwright_proxy(proxy["url"])
+
+        context = await browser.new_context(**context_kwargs)
         cookies = [{"name": "li_at", "value": creds["li_at"], "domain": ".linkedin.com", "path": "/"}]
         if creds.get("jsessionid"):
             cookies.append(

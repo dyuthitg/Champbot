@@ -17,11 +17,12 @@ from src.infrastructure.transports.base import TransportUnavailable
 from src.infrastructure.transports.playwright_executor import (
     BrowserExecutor,
     _activity_url,
+    _playwright_proxy,
 )
 
 
-def _account(auth_blob=None):
-    return types.SimpleNamespace(id="acct-1", auth_blob=auth_blob)
+def _account(auth_blob=None, proxy=None):
+    return types.SimpleNamespace(id="acct-1", auth_blob=auth_blob, proxy=proxy)
 
 
 class FakeElement:
@@ -81,8 +82,10 @@ class FakeBrowser:
     def __init__(self, page):
         self._page = page
         self.contexts = []
+        self.new_context_kwargs = []
 
     async def new_context(self, **kwargs):
+        self.new_context_kwargs.append(kwargs)
         ctx = FakeContext(self._page)
         self.contexts.append(ctx)
         return ctx
@@ -182,3 +185,40 @@ async def test_cookies_built_from_auth_blob_include_jsessionid_when_present():
     li_at = next(c for c in cookies if c["name"] == "li_at")
     assert li_at["value"] == "the-li-at"
     assert li_at["domain"] == ".linkedin.com"
+
+
+def test_playwright_proxy_splits_credentials_out_of_the_url():
+    assert _playwright_proxy("http://user:pass@1.2.3.4:8080") == {
+        "server": "http://1.2.3.4:8080",
+        "username": "user",
+        "password": "pass",
+    }
+
+
+def test_playwright_proxy_handles_a_bare_url_with_no_credentials():
+    assert _playwright_proxy("http://1.2.3.4:8080") == {"server": "http://1.2.3.4:8080"}
+
+
+async def test_new_page_routes_through_the_accounts_proxy_when_configured():
+    page = FakePage({"button[aria-label*=\"Like\"]": FakeElement(aria_pressed="false")})
+    executor, browser = _executor_for(page)
+
+    await executor.like(
+        _account("li_at_value", proxy={"url": "http://user:pass@1.2.3.4:8080"}),
+        "urn:li:activity:1",
+    )
+
+    assert browser.new_context_kwargs[0]["proxy"] == {
+        "server": "http://1.2.3.4:8080",
+        "username": "user",
+        "password": "pass",
+    }
+
+
+async def test_new_page_has_no_proxy_kwarg_when_account_has_none():
+    page = FakePage({"button[aria-label*=\"Like\"]": FakeElement(aria_pressed="false")})
+    executor, browser = _executor_for(page)
+
+    await executor.like(_account("li_at_value"), "urn:li:activity:1")
+
+    assert "proxy" not in browser.new_context_kwargs[0]
