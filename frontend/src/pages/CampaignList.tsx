@@ -102,7 +102,7 @@ export function CampaignList() {
           <div>
             <h1
               ref={headingRef}
-              className="text-2xl font-semibold text-slate-100 mb-2"
+              className="font-display text-2xl font-semibold text-slate-100 mb-2"
             >
               LinkedIn Campaigns
             </h1>

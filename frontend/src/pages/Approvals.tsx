@@ -503,7 +503,7 @@ export function Approvals() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-100">Approvals</h1>
+        <h1 className="font-display text-2xl font-semibold text-slate-100">Approvals</h1>
         <p className="text-slate-400 mt-1">
           Nothing is sent to LinkedIn until you approve it here.
         </p>

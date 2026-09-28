@@ -156,7 +156,7 @@ export function CreateCampaign() {
           Back to Campaigns
         </button>
 
-        <h1 className="text-2xl font-semibold text-slate-100 mb-2">
+        <h1 className="font-display text-2xl font-semibold text-slate-100 mb-2">
           Create New Campaign
         </h1>
         <p className="text-muted">

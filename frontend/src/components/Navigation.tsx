@@ -58,7 +58,7 @@ export function Navigation() {
               whileHover={reduced ? undefined : { scale: 1.03 }}
               whileTap={reduced ? undefined : { scale: 0.97 }}
               tabIndex={-1}
-              className="text-lg font-bold bg-gradient-to-r from-purple-400 to-amber-300 bg-clip-text text-transparent"
+              className="font-display text-lg font-bold bg-gradient-to-r from-purple-400 to-amber-300 bg-clip-text text-transparent"
             >
               Social Bot
             </motion.div>

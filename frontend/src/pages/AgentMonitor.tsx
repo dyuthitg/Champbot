@@ -119,7 +119,7 @@ export function AgentMonitor() {
     <div ref={containerRef} className="max-w-6xl mx-auto px-4 py-8">
       <div className="monitor-header flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">Automation activity</h1>
+          <h1 className="font-display text-2xl font-semibold text-slate-100">Automation activity</h1>
           <p className="text-slate-400 mt-1">
             What your automation is doing right now, live.
           </p>
@@ -204,7 +204,7 @@ function StatTile({
         {icon}
       </div>
       <div className="min-w-0">
-        <div className="text-2xl font-semibold text-slate-100 leading-none">
+        <div className="font-display text-2xl font-semibold text-slate-100 leading-none">
           {value.toLocaleString()}
         </div>
         <div className="text-xs text-slate-400 mt-1">{label}</div>

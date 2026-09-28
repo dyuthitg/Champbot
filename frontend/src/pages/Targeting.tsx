@@ -62,7 +62,7 @@ export function Targeting() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <header className="flex items-start justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">Targeting</h1>
+          <h1 className="font-display text-2xl font-semibold text-slate-100">Targeting</h1>
           <p className="text-slate-400 mt-1">
             Who is worth talking to — and just as importantly, who isn't.
           </p>

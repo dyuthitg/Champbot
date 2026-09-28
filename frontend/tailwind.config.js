@@ -53,6 +53,14 @@ export default {
           900: '#000f1f',
         },
       },
+      // Two families, not the Tailwind-default system-ui stack: Space
+      // Grotesk for headings/display numbers, Plus Jakarta Sans for body
+      // text. `sans` is what `body` uses (see index.css), so this is the
+      // whole app's type unless a node explicitly opts into `font-display`.
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['"Space Grotesk"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
       // 5 type sizes. Named by role, not by pixel guesswork — every text
       // node in the Review Queue components picks one of these five.
       fontSize: {
