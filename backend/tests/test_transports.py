@@ -1,6 +1,6 @@
 """
 Tests for the transport scaffold: fingerprint stability, composite routing
-(mobile -> Playwright fallback), and the Playwright executor adapter.
+(mobile -> browser fallback), and the browser executor adapter.
 """
 
 import types
@@ -16,7 +16,7 @@ from src.infrastructure.transports.base import (
 )
 from src.infrastructure.transports.fingerprints import generate_fingerprint
 from src.infrastructure.transports.mobile import MobileAPITransport
-from src.infrastructure.transports.playwright import PlaywrightTransport
+from src.infrastructure.transports.browser import BrowserTransport
 
 # asyncio_mode=auto (pytest.ini) auto-marks async tests; no module-wide mark so
 # the sync fingerprint tests aren't flagged.
@@ -70,7 +70,7 @@ class FakeTransport:
 
 async def test_primary_success_skips_fallback():
     primary = FakeTransport("mobile", "ok")
-    fallback = FakeTransport("playwright", "ok")
+    fallback = FakeTransport("browser", "ok")
     comp = CompositeTransport(primary, fallback)
 
     result = await comp.like(_account(), "urn:activity:1")
@@ -81,25 +81,25 @@ async def test_primary_success_skips_fallback():
 
 async def test_unavailable_triggers_fallback():
     primary = FakeTransport("mobile", "unavailable")
-    fallback = FakeTransport("playwright", "ok")
+    fallback = FakeTransport("browser", "ok")
     comp = CompositeTransport(primary, fallback)
 
     result = await comp.like(_account(), "urn:activity:1")
     assert result.success
-    assert result.via == "playwright"
+    assert result.via == "browser"
     assert result.detail["fell_back_from"] == "mobile"
     assert fallback.calls == ["like"]
 
 
 async def test_challenge_triggers_fallback():
-    comp = CompositeTransport(FakeTransport("mobile", "challenge"), FakeTransport("playwright", "ok"))
+    comp = CompositeTransport(FakeTransport("mobile", "challenge"), FakeTransport("browser", "ok"))
     result = await comp.like(_account(), "urn:activity:1")
-    assert result.success and result.via == "playwright"
+    assert result.success and result.via == "browser"
 
 
 async def test_both_unavailable_returns_failure():
     comp = CompositeTransport(
-        FakeTransport("mobile", "unavailable"), FakeTransport("playwright", "unavailable")
+        FakeTransport("mobile", "unavailable"), FakeTransport("browser", "unavailable")
     )
     result = await comp.like(_account(), "urn:activity:1")
     assert not result.success
@@ -116,24 +116,24 @@ async def test_both_failing_reports_the_primary_error_too():
     """
     When both transports fail, the primary's error must survive.
 
-    Until the Playwright executor is bound its failure is always the same
+    When the browser executor lacks an action its failure is the same
     uninformative sentence. If that were the only thing reported, it would mask
     the Voyager response — which is the one piece of information needed to fix a
     drifted endpoint shape against a live account.
     """
     comp = CompositeTransport(
         FakeTransport("mobile", "unavailable"),
-        FakeTransport("playwright", "unavailable"),
+        FakeTransport("browser", "unavailable"),
     )
 
     result = await comp.like(_account(), "urn:activity:1")
 
     assert not result.success
     assert "mobile unavailable" in result.error
-    assert "playwright unavailable" in result.error
+    assert "browser unavailable" in result.error
     assert result.detail["primary_error"] == "mobile unavailable"
     assert result.detail["primary_via"] == "mobile"
-    assert result.detail["fallback_error"] == "playwright unavailable"
+    assert result.detail["fallback_error"] == "browser unavailable"
 
 
 # --- Mobile scaffold falls back today ---
@@ -338,23 +338,29 @@ async def test_fetch_inbox_does_not_retry_a_plain_4xx():
     assert len(session.urls) == 2
 
 
-# --- Playwright executor adapter ---
+# --- Browser executor adapter ---
 
 class FakeExecutor:
     async def like(self, account, activity_urn):
         return TransportResult(success=True, action="like")
 
 
-async def test_playwright_delegates_to_executor():
-    pw = PlaywrightTransport(executor=FakeExecutor())
+async def test_browser_delegates_to_executor():
+    pw = BrowserTransport(executor=FakeExecutor())
     result = await pw.like(_account(), "urn:activity:1")
-    assert result.success and result.via == "playwright"
+    assert result.success and result.via == "browser"
 
 
-async def test_playwright_without_executor_is_unavailable():
-    pw = PlaywrightTransport(executor=None)
+async def test_browser_without_executor_is_unavailable():
+    pw = BrowserTransport(executor=None)
     with pytest.raises(TransportUnavailable):
         await pw.like(_account(), "urn:activity:1")
+
+
+async def test_browser_executor_missing_action_is_unavailable():
+    pw = BrowserTransport(executor=FakeExecutor())
+    with pytest.raises(TransportUnavailable, match="browser executor lacks follow"):
+        await pw.follow(_account(), "urn:li:member:1")
 
 
 # --- Factory ---
@@ -365,8 +371,8 @@ async def test_get_transport_composite_by_default(monkeypatch):
     assert isinstance(t, CompositeTransport)
 
 
-async def test_get_transport_playwright_only_when_disabled(monkeypatch):
+async def test_get_transport_browser_only_when_disabled(monkeypatch):
     monkeypatch.setenv("MOBILE_TRANSPORT_ENABLED", "false")
-    t = get_transport(_account(), playwright_executor=FakeExecutor())
-    assert isinstance(t, PlaywrightTransport)
+    t = get_transport(_account(), browser_executor=FakeExecutor())
+    assert isinstance(t, BrowserTransport)
     assert isinstance(t, LinkedInTransport)

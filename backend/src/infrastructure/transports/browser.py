@@ -1,17 +1,20 @@
 """
-Playwright transport (fallback).
+Browser transport (fallback).
 
-Wraps the existing, working browser automation (the ``_execute_*`` methods in
-``InteractionAgent``) behind the transport interface so the composite router can
-fall back to it whenever the mobile API can't handle an action or the account
-hits a challenge.
+Puts real-browser automation behind the transport interface so the composite
+router can fall back to it whenever the mobile API can't handle an action or
+the account hits a challenge.
 
 It delegates to an injected ``executor`` object exposing async action methods
-(``like``, ``comment``, ``follow``, ``connect``, ``send_message``,
-``create_post``, ...). In the running system the executor is bound to a live
-browser session obtained from the account manager; in tests a fake executor is
-injected. Without an executor bound, actions raise ``TransportUnavailable`` so
-the router surfaces a clear failure rather than silently no-op-ing.
+(``like``, ``comment``, ``fetch_inbox``, ...). In the running system that's
+:class:`~src.infrastructure.transports.harness_executor.HarnessExecutor`
+(browser-harness driving a per-account Chrome over CDP); in tests a fake
+executor is injected. An executor that lacks a method, or no executor at all,
+raises ``TransportUnavailable`` so the router surfaces a clear failure rather
+than silently no-op-ing.
+
+This used to be ``PlaywrightTransport`` wrapping a Playwright executor. That
+version is preserved on the ``playwright-fallback`` git branch.
 """
 
 from __future__ import annotations
@@ -24,18 +27,18 @@ from src.infrastructure.transports.base import (
 )
 
 
-class PlaywrightTransport:
-    name = "playwright"
+class BrowserTransport:
+    name = "browser"
 
     def __init__(self, executor: Any = None):
         self._executor = executor
 
     async def _delegate(self, action: str, *args, **kwargs) -> TransportResult:
         if self._executor is None:
-            raise TransportUnavailable(f"no playwright executor bound for {action}")
+            raise TransportUnavailable(f"no browser executor bound for {action}")
         method = getattr(self._executor, action, None)
         if method is None:
-            raise TransportUnavailable(f"playwright executor lacks {action}")
+            raise TransportUnavailable(f"browser executor lacks {action}")
         result = await method(*args, **kwargs)
         # Executors may return a TransportResult or a truthy value.
         if isinstance(result, TransportResult):

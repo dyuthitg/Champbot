@@ -27,8 +27,8 @@ and how the **admin dashboard** aggregates activity across all accounts.
   rate, with automatic demotion on a challenge or a collapsed acceptance rate.
 - **The mobile transport now calls real Voyager endpoints** (whoami, invite,
   message, like, comment, post, profile, inbox) over a TLS-fingerprinted
-  session with a stable per-account device identity, with Playwright as the
-  fallback. It is validated against a recording transport in tests but has not
+  session with a stable per-account device identity, with a real browser
+  (browser-harness driving a per-account headless Chrome) as the fallback. It is validated against a recording transport in tests but has not
   yet been proven against a live LinkedIn account — see §4 for exactly what
   that means.
 - Multi-account is modeled *and used* (Org → User → ConnectedAccount), and the
@@ -88,7 +88,7 @@ Key modules:
 | Campaign→agent bridge | `src/infrastructure/task_bridge.py` | REAL |
 | Transport interface + router | `src/infrastructure/api_client.py`, `transports/*` | REAL interface |
 | Mobile transport endpoints | `src/infrastructure/transports/mobile.py` | REAL, unvalidated live |
-| Playwright transport | `src/infrastructure/transports/playwright.py` | REAL adapter, not bound |
+| Browser fallback | `transports/browser.py`, `harness_executor.py`, `chrome_pool.py` | REAL, bound; like/comment/fetch_inbox only, unvalidated live |
 | Agent runtime | `src/agents/*`, `src/infrastructure/orchestrator.py` | mixed (see §4) |
 | Skeleton agents | `safety/scheduler/whatsapp_monitor/analytics_agent.py` | SCAFFOLD |
 
@@ -174,7 +174,7 @@ live LinkedIn account. Precisely:
 
 What's REAL and tested:
 - `LinkedInTransport` protocol and the `CompositeTransport` router
-  (`api_client.py`): tries mobile first, falls back to Playwright on
+  (`api_client.py`): tries mobile first, falls back to the browser on
   `TransportUnavailable`/`TransportChallenge`.
 - Per-account **device fingerprint** generation (stable UA / device-id / OS /
   app-version + curl_cffi TLS-impersonation profile): `transports/fingerprints.py`.
@@ -193,10 +193,22 @@ What is NOT yet proven:
   shapes drift; the endpoint bodies here are written against the shapes the
   first-party clients use, but until they run against a real session we cannot
   claim they work. Expect to iterate on the exact payloads.
-- The **Playwright fallback executor is still not bound**
-  (`get_transport(..., playwright_executor=None)`), so if a mobile shape is
-  wrong today the fallback cannot rescue it — the action fails cleanly and the
-  suggestion is marked `failed` with the error recorded.
+- The **browser fallback** (`HarnessExecutor`, bound by default in
+  `get_transport`) covers only `like`, `comment` and `fetch_inbox`. Everything
+  else fails cleanly with `browser executor lacks <action>`. It runs
+  [browser-harness](https://github.com/browser-use/browser-harness) as a
+  subprocess against a per-account headless Chrome from `ChromePool`: own
+  profile dir, own loopback DevTools port, and the account's proxy (a local
+  `pproxy` forwarder when the proxy has credentials). `fetch_inbox` reads the
+  JSON LinkedIn's own `/messaging/` page fetches, rather than scraping the DOM,
+  so no thread gets marked read. None of its selectors or payload shapes have
+  been confirmed against a live session yet.
+  - browser-harness lives in its **own venv** (`requirements-harness.txt`,
+    `HARNESS_PYTHON`) because it pins `websockets==15` and the app pins `<13`.
+  - Its telemetry would upload script text, so `BH_TELEMETRY=0` is always set
+    and cookies and arguments only ever travel in env vars.
+  - The previous Playwright executor is preserved on the `playwright-fallback`
+    git branch.
 - The agent runtime's session bridge (`InteractionAgent._wait_for_response`)
   remains BROKEN, so the *agent-runtime* path still can't act. The outreach
   loop does not depend on it — it calls transports directly from the API.
@@ -211,11 +223,12 @@ What is NOT yet proven:
 3. Fix payloads as needed. Because each action tries multiple shapes and the
    composite falls back, a wrong guess degrades to a clean failure rather than
    a corrupted send.
-4. Then bind the Playwright executor as the safety net for shapes that break.
+4. The browser fallback is already bound; check `detail.fell_back_from` on a
+   result to see when it rescued a mobile shape.
 
 Ban-risk posture (why mobile-first): mobile-API traffic with stable per-account
 fingerprints + the global daily caps (§5) is far lower risk than headless
-Chromium. Playwright stays as the fallback only.
+Chromium. The browser stays as the fallback only.
 
 ---
 
@@ -526,8 +539,8 @@ Known gaps to close: the WS server is not implemented, so the UI polls.
 1. **Validate the mobile endpoints against one real account** (§4). This is the
    single highest-value next step: everything else is built and tested, and this
    is the only thing standing between the loop and real sends.
-2. **Bind the Playwright executor** as the fallback, so a drifted Voyager shape
-   degrades to a slower send rather than a failure.
+2. ~~Bind a browser executor as the fallback.~~ **DONE** for like/comment/
+   fetch_inbox via browser-harness (§4). Validate its selectors live next.
 3. ~~Deploy the agent runtime / a scheduled job that drives warm-up, sync and
    send on a tick.~~ **DONE** — `src/scheduler`, see §12. Off by default until
    the mobile transport is validated (step 1); `SCHEDULER_ENABLED=true

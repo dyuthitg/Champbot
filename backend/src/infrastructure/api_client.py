@@ -2,7 +2,7 @@
 LinkedIn transport factory + composite router.
 
 ``get_transport(account)`` returns a :class:`CompositeTransport` that tries the
-mobile-API transport first and transparently falls back to Playwright when the
+mobile-API transport first and transparently falls back to a real browser when the
 mobile transport signals it can't handle the action (``TransportUnavailable``)
 or the account hits a verification wall (``TransportChallenge``). This is the
 single seam the interaction/inbox/content code calls; neither caller nor the
@@ -22,26 +22,32 @@ from src.infrastructure.transports.base import (
     TransportUnavailable,
 )
 from src.infrastructure.transports.mobile import MobileAPITransport
-from src.infrastructure.transports.playwright import PlaywrightTransport
+from src.infrastructure.transports.browser import BrowserTransport
 
 _FALLBACK_ON = (TransportUnavailable, TransportChallenge)
 
-# Lazily-constructed, process-wide default executor: real chromium, launched
-# on first actual use (constructing it here does nothing eager). Explicit
-# `playwright_executor=` on get_transport() always overrides this -- tests do
-# this to inject a fake. Before this existed, every caller left the fallback
-# executor as None, so Playwright never actually worked as a backup for
-# anyone -- see playwright_executor.py's module docstring for why.
+# Lazily-constructed, process-wide default executor: browser-harness driving
+# a per-account Chrome, launched on first actual use (constructing it here does
+# nothing eager). Explicit `browser_executor=` on get_transport() always
+# overrides this -- tests do this to inject a fake.
 _default_browser_executor = None
 
 
 def _get_default_browser_executor():
     global _default_browser_executor
     if _default_browser_executor is None:
-        from src.infrastructure.transports.playwright_executor import BrowserExecutor
+        from src.infrastructure.transports.harness_executor import HarnessExecutor
 
-        _default_browser_executor = BrowserExecutor()
+        _default_browser_executor = HarnessExecutor()
     return _default_browser_executor
+
+
+async def close_default_browser_executor() -> None:
+    """Shut down any Chromes the default executor launched. Safe if none were."""
+    global _default_browser_executor
+    if _default_browser_executor is not None:
+        await _default_browser_executor.close()
+        _default_browser_executor = None
 
 
 class CompositeTransport:
@@ -76,9 +82,9 @@ class CompositeTransport:
                 return result
             except self.fallback_on as exc2:
                 # Report BOTH failures. Reporting only the fallback's is how a
-                # real diagnosis gets lost: while the Playwright executor is
-                # unbound, its error is always the same uninformative sentence,
-                # and it would mask the Voyager response that actually explains
+                # real diagnosis gets lost: when the browser executor can't
+                # handle an action its error is a generic sentence, and it
+                # would mask the Voyager response that actually explains
                 # what went wrong — exactly what you need when validating the
                 # mobile endpoints against a live account.
                 return TransportResult(
@@ -133,32 +139,31 @@ class CompositeTransport:
 def get_transport(
     account: Any,
     *,
-    playwright_executor: Any = None,
+    browser_executor: Any = None,
     mobile_session_factory: Any = None,
 ) -> LinkedInTransport:
     """
     Build the transport for an account.
 
     Honors ``MOBILE_TRANSPORT_ENABLED`` (default true). When disabled, returns a
-    Playwright-only transport so operators can pin to the browser path.
+    browser-only transport so operators can pin to the browser path.
 
-    ``playwright_executor`` defaults to a shared, real ``BrowserExecutor`` (a
-    real chromium instance, launched lazily on first use) rather than
-    ``None`` -- pass an explicit executor (fake or real) to override, which
-    is what tests do. Only ``like``/``comment`` actually work through it
-    today; see ``playwright_executor.py``'s module docstring for the honest
-    reason ``follow``/``connect``/the ``fetch_*`` reads don't.
+    ``browser_executor`` defaults to a shared, real ``HarnessExecutor``
+    (browser-harness driving a per-account headless Chrome, launched lazily on
+    first use) -- pass an explicit executor (fake or real) to override, which
+    is what tests do. Only ``like``/``comment``/``fetch_inbox`` work through it
+    today; see ``harness_executor.py``'s module docstring.
     """
     mobile_enabled = os.getenv("MOBILE_TRANSPORT_ENABLED", "true").lower() != "false"
-    if playwright_executor is None:
-        playwright_executor = _get_default_browser_executor()
-    playwright = PlaywrightTransport(executor=playwright_executor)
+    if browser_executor is None:
+        browser_executor = _get_default_browser_executor()
+    browser = BrowserTransport(executor=browser_executor)
 
     if not mobile_enabled:
-        return playwright
+        return browser
 
     mobile = MobileAPITransport(session_factory=mobile_session_factory)
-    return CompositeTransport(primary=mobile, fallback=playwright)
+    return CompositeTransport(primary=mobile, fallback=browser)
 
 
 # Ensure the composite implements the full action surface (guards drift).

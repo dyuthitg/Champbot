@@ -111,6 +111,12 @@ async def lifespan(app: FastAPI):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        # Per-account Chromes the browser fallback launched are child processes;
+        # stop them rather than leaving them orphaned across a redeploy.
+        from src.infrastructure.api_client import close_default_browser_executor
+
+        with contextlib.suppress(Exception):
+            await close_default_browser_executor()
         if app.state.redis is not None:
             await app.state.redis.aclose()
 

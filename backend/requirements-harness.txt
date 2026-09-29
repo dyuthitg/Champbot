@@ -1,0 +1,6 @@
+# Browser fallback runtime. Installed into its OWN virtualenv (see Dockerfile,
+# HARNESS_PYTHON), never alongside requirements.txt: browser-harness pins
+# websockets==15.0.1 and this app pins websockets<13. Both packages below only
+# run as subprocesses of the app, so they don't need to share its environment.
+browser-harness==0.1.13
+pproxy==2.7.9

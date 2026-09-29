@@ -30,6 +30,14 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Browser fallback runtime in its own venv: browser-harness pins
+# websockets==15 and the app pins websockets<13. It only ever runs as a
+# subprocess of the app (HARNESS_PYTHON below), so the two never have to share
+# an environment.
+COPY backend/requirements-harness.txt .
+RUN python -m venv /opt/harness && \
+    /opt/harness/bin/pip install --no-cache-dir -r requirements-harness.txt
+
 # Stage 3: minimal runtime image
 FROM python:3.11-slim
 WORKDIR /app
@@ -37,12 +45,15 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libpq5 \
+    chromium \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 appuser
 
 # Python packages from the builder stage
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /opt/harness /opt/harness
 
 # Application code
 COPY backend/src/ ./src/
@@ -68,6 +79,18 @@ USER appuser
 # migration describes, which is how a schema drifts out from under its history.
 ENV AUTO_CREATE_TABLES=false \
     PYTHONUNBUFFERED=1
+
+# Browser fallback (browser-harness driving a per-account headless Chromium).
+# --no-sandbox because a non-root container user has no usable namespace
+# sandbox; each Chrome is still confined to its own profile dir and loopback
+# DevTools port. Profiles live under /app/data so they survive restarts when
+# /app/data is a volume.
+ENV HARNESS_PYTHON=/opt/harness/bin/python \
+    CHROME_BIN=/usr/bin/chromium \
+    CHROME_NO_SANDBOX=true \
+    CHROME_DATA_DIR=/app/data/chrome \
+    BH_HOME=/app/data/harness \
+    BH_TELEMETRY=0
 
 EXPOSE 8000
 

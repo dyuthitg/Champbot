@@ -65,6 +65,9 @@ async def _main() -> int:
     except asyncio.CancelledError:
         log.info("scheduler: shut down cleanly")
     finally:
+        from src.infrastructure.api_client import close_default_browser_executor
+
+        await close_default_browser_executor()
         if redis is not None:
             await redis.aclose()
 

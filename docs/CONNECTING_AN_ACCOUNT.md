@@ -215,8 +215,12 @@ volume doesn't fix sending to the wrong people.
 - **Warm-up activity is planned, not yet autonomous.** The system computes each
   day's activity, but nothing executes it on a schedule yet — you trigger it.
   This is the biggest remaining gap.
-- **The Playwright fallback isn't bound**, so a drifted Voyager shape currently
-  means a failed action rather than a slower one.
+- **The browser fallback covers only like, comment and reading the inbox.**
+  If a Voyager shape drifts for any other action, that action fails rather
+  than running more slowly through the browser. For the inbox, a failed probe
+  now names both halves, e.g.
+  `mobile: … HTTP 500 || browser: navigation … failed: ERR_TOO_MANY_REDIRECTS`
+  (a redirect loop there almost always means the `li_at` is dead).
 - **No OpenRouter key configured** means copy comes from templates. They're
   plain but they clear the quality gate. Adding a key is what makes the writing
   genuinely good.

@@ -75,7 +75,7 @@ class AccountResponse(BaseModel):
     policy: dict = Field(default_factory=dict, description="Effective caps + pacing")
     has_credentials: bool = False
     transport: Optional[str] = Field(
-        None, description="Which transport verified this account: mobile | playwright"
+        None, description="Which transport verified this account: mobile | browser"
     )
     last_post_at: Optional[datetime] = None
     last_active_at: Optional[datetime] = None

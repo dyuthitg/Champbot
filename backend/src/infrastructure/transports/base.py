@@ -3,7 +3,7 @@ LinkedIn transport interface.
 
 A *transport* performs a LinkedIn action for a connected account. Two exist:
 ``MobileAPITransport`` (primary; simulated mobile client, low ban risk) and
-``PlaywrightTransport`` (fallback; drives the existing browser automation). The
+``BrowserTransport`` (fallback; drives a real browser via browser-harness). The
 :class:`CompositeTransport` in ``api_client.py`` routes between them.
 
 Transports signal "I can't handle this, try the fallback" by raising
@@ -36,7 +36,7 @@ class TransportResult:
     """Normalized outcome of a transport action."""
     success: bool
     action: str
-    via: str = ""               # "mobile" | "playwright"
+    via: str = ""               # "mobile" | "browser"
     detail: Optional[dict] = None
     error: Optional[str] = None
 
