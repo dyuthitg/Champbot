@@ -20,8 +20,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+import re
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -209,6 +210,54 @@ async def _done_today(db: AsyncSession, account, now: datetime) -> dict:
         )
     ).all()
     return {action: int(count) for action, count in rows}
+
+
+# LinkedIn opens a post at /feed/update/<urn>/ for these kinds of id. Feed
+# responses sometimes wrap one inside a longer urn, so it is searched for.
+_POST_URN = re.compile(r"urn:li:(?:activity|share|ugcPost):\d+")
+
+
+def post_url(urn: Optional[str]) -> Optional[str]:
+    """A link that opens this post on LinkedIn, or None if the urn isn't a post."""
+    match = _POST_URN.search(urn or "")
+    return f"https://www.linkedin.com/feed/update/{match.group(0)}/" if match else None
+
+
+async def recent_activity(
+    db: AsyncSession, account, *, action: Optional[str] = None, limit: int = 50
+) -> List[dict]:
+    """
+    What the account has done lately, newest first, for people to look at.
+
+    Includes failed and blocked attempts too: "it tried and LinkedIn refused"
+    is exactly what someone checking on the account needs to see.
+    """
+    from src.targeting.models import OutreachTarget
+
+    stmt = (
+        select(AccountActivity, OutreachTarget.full_name)
+        .outerjoin(OutreachTarget, OutreachTarget.id == AccountActivity.target_id)
+        .where(AccountActivity.account_id == account.id)
+        .order_by(AccountActivity.created_at.desc())
+        .limit(limit)
+    )
+    if action:
+        stmt = stmt.where(AccountActivity.action == action)
+
+    return [
+        {
+            "id": str(entry.id),
+            "action": entry.action,
+            "status": entry.status,
+            "stage": entry.stage,
+            "at": entry.created_at.isoformat() if entry.created_at else None,
+            "person": name,
+            "post_text": (entry.detail or {}).get("post_text"),
+            "url": post_url(entry.subject_urn) if entry.action == program.LIKE else None,
+            "error": entry.error,
+        }
+        for entry, name in (await db.execute(stmt)).all()
+    ]
 
 
 def can_perform(account, action: str, health: Any = None) -> tuple:

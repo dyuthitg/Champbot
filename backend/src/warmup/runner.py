@@ -55,6 +55,10 @@ logger = logging.getLogger(__name__)
 # feed every tick is itself a detectable pattern.
 PROFILE_SAMPLE = 8
 
+# How much of a liked post's text to keep, so the activity list can show which
+# post it was without copying the whole thing into the ledger.
+POST_SNIPPET_CHARS = 280
+
 
 class RunResult(dict):
     """Summary of one warm-up run."""
@@ -245,12 +249,14 @@ async def _perform_auto(
         if item is None:
             return None
         subject, target_id, label = item["urn"], item["target_id"], item.get("name")
+        snippet = (item.get("text") or "")[:POST_SNIPPET_CHARS] or None
         call = client.like(live, subject)
     else:
         item = _take(feed)
         if item is None:
             return None
         subject, target_id, label = item["member_urn"], item["target_id"], item.get("name")
+        snippet = None
         call = client.follow(live, subject)
 
     try:
@@ -279,7 +285,7 @@ async def _perform_auto(
         status=ActivityStatus.OK if result.success else ActivityStatus.FAILED,
         subject_urn=subject,
         target_id=target_id,
-        detail={"via": result.via},
+        detail={"via": result.via, **({"post_text": snippet} if snippet else {})},
         error=None if result.success else result.error,
         commit=False,
     )

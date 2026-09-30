@@ -524,6 +524,19 @@ export interface PlannedAction {
   reason: string;
 }
 
+// One thing an account actually did (or tried to), from the activity ledger.
+export interface WarmupActivityItem {
+  id: string;
+  action: string;
+  status: 'ok' | 'failed' | 'blocked';
+  stage: string | null;
+  at: string | null;
+  person: string | null;
+  post_text: string | null;
+  url: string | null;
+  error: string | null;
+}
+
 export interface WarmupToday extends WarmupStatus {
   plan: {
     day?: string;

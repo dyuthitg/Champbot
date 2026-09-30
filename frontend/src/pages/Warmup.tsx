@@ -15,6 +15,7 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  ExternalLink,
   Heart,
   Lock,
   MessageSquare,
@@ -27,7 +28,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { accountApi, preflight, warmupApi } from '@/lib/api';
-import type { Funnel, HealthVerdict, PreflightReport } from '@/types';
+import type { Funnel, HealthVerdict, PreflightReport, WarmupActivityItem } from '@/types';
 
 const STAGE_ICON: Record<string, typeof Heart> = {
   observe: Activity,
@@ -264,6 +265,8 @@ export function Warmup() {
               )}
             </div>
           </section>
+
+          <LikedPosts accountId={accountId} />
         </>
       )}
     </div>
@@ -474,5 +477,90 @@ function PreflightPanel({
         </ul>
       )}
     </motion.div>
+  );
+}
+
+// What the account has really liked, newest first. The plan above says what it
+// intends to do; this is the record of what it did, with a link to each post.
+function LikedPosts({ accountId }: { accountId: string }) {
+  const { data: likes = [], isLoading } = useQuery({
+    queryKey: ['warmup-activity', accountId, 'like'],
+    queryFn: () => warmupApi.activity(accountId, 'like'),
+    enabled: !!accountId,
+    refetchInterval: 60_000,
+  });
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-sm font-medium text-slate-300 mb-3">Liked posts</h2>
+      <div className="rounded-xl bg-slate-800/60 border border-slate-700 p-5">
+        {isLoading ? (
+          <p className="text-sm text-slate-500">Loading&hellip;</p>
+        ) : likes.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            Nothing liked yet. Each post appears here as soon as it is liked.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-700/60 max-h-96 overflow-y-auto">
+            {likes.map((item) => (
+              <LikedPostRow key={item.id} item={item} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LikedPostRow({ item }: { item: WarmupActivityItem }) {
+  const ok = item.status === 'ok';
+  return (
+    <li className="py-3 first:pt-0 last:pb-0 flex items-start gap-3">
+      <Heart
+        className={clsx(
+          'w-4 h-4 mt-0.5 shrink-0',
+          ok ? 'text-rose-400 fill-rose-400/30' : 'text-slate-500',
+        )}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2 flex-wrap text-sm">
+          <span className="text-slate-100 font-medium">
+            {item.person ?? 'Unknown person'}
+          </span>
+          {item.at && (
+            <time className="text-xs text-slate-500 tabular-nums">
+              {new Date(item.at).toLocaleString([], {
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </time>
+          )}
+          {!ok && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-300">
+              {item.status === 'blocked' ? 'Blocked by LinkedIn' : 'Failed'}
+            </span>
+          )}
+        </div>
+        {item.post_text && (
+          <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.post_text}</p>
+        )}
+        {!ok && item.error && (
+          <p className="text-xs text-red-300/80 mt-1 truncate">{item.error}</p>
+        )}
+      </div>
+      {item.url && (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 inline-flex items-center gap-1 text-xs text-sky-300 hover:text-sky-200"
+        >
+          Open post
+          <ExternalLink className="w-3.5 h-3.5" />
+        </a>
+      )}
+    </li>
   );
 }
