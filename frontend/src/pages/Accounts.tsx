@@ -278,6 +278,8 @@ function AccountRow({
       if (!result.ok) onError(result.error ?? 'That session is no longer valid.');
       onChanged();
     },
+    onError: (err: any) =>
+      onError(err?.response?.data?.detail ?? 'Could not verify that account'),
   });
 
   const update = useMutation({
