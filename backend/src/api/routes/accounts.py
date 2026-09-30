@@ -15,7 +15,6 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.accounts import service as accounts_service
-from src.accounts.crypto import EncryptionUnavailable
 from src.accounts.models import AccountStatus
 from src.accounts.schemas import (
     AccountConnect,
@@ -57,8 +56,6 @@ async def connect_account(
         record = await accounts_service.connect_account(
             db, org_id=ctx.org_id, user_id=ctx.user_id, payload=payload
         )
-    except EncryptionUnavailable as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
     except accounts_service.AccountError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return accounts_service.to_response(record)

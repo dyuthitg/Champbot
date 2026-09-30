@@ -29,6 +29,10 @@ class EncryptionUnavailable(RuntimeError):
     """No usable encryption key is configured."""
 
 
+class CredentialsUndecryptable(EncryptionUnavailable):
+    """A stored blob will not decrypt with the current key (rotated or tampered)."""
+
+
 def _dev_key() -> bytes:
     """Deterministic local-only key so `USE_SQLITE=true` dev runs work."""
     digest = hashlib.sha256(_DEV_KEY_SEED.encode()).digest()
@@ -89,6 +93,6 @@ def decrypt_auth(blob: Optional[str]) -> Optional[str]:
     try:
         return _fernet().decrypt(blob.encode()).decode()
     except InvalidToken as exc:
-        raise EncryptionUnavailable(
+        raise CredentialsUndecryptable(
             "stored credentials could not be decrypted (key rotated?)"
         ) from exc

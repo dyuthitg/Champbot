@@ -14,8 +14,10 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.accounts.crypto import CredentialsUndecryptable, EncryptionUnavailable
 from src.api import realtime
 from src.api.routes import (
     accounts,
@@ -181,6 +183,33 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Credential encryption failures are configuration problems, not crashes. Any
+# route that encrypts or decrypts a session cookie (connect, rotate, verify,
+# preflight) can hit them, so they are mapped once here rather than per route.
+@app.exception_handler(CredentialsUndecryptable)
+async def _credentials_undecryptable(request: Request, exc: CredentialsUndecryptable):
+    logger.error("Stored credentials failed to decrypt on %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=409,
+        content={
+            "detail": "This account's saved session can't be read, most likely because "
+            "the server's ENCRYPTION_KEY changed. Update its cookies to reconnect it."
+        },
+    )
+
+
+@app.exception_handler(EncryptionUnavailable)
+async def _encryption_unavailable(request: Request, exc: EncryptionUnavailable):
+    logger.error("Credential encryption unavailable on %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Account connections are unavailable: the server has no "
+            "ENCRYPTION_KEY configured."
+        },
+    )
+
 
 # Mount routers under the versioned API prefix.
 app.include_router(campaigns.router, prefix=API_V1_PREFIX)
