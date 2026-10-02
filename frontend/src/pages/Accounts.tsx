@@ -457,6 +457,9 @@ function AccountRow({
           <span className="text-slate-200">
             {account.policy?.active_hours?.[0]}:00–{account.policy?.active_hours?.[1]}:00
           </span>
+          {account.policy?.timezone && (
+            <span className="text-slate-500"> {account.policy.timezone} time</span>
+          )}
         </span>
         <span>
           Review queue{' '}

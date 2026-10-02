@@ -323,3 +323,48 @@ async def test_today_returns_a_plan_for_the_current_stage(db, account):
     assert result["stage"] == program.FIRST_STAGE
     for item in result["plan"]["actions"]:
         assert item["action"] in program.stage_for(program.FIRST_STAGE).allowed
+
+
+# ----------------------------------------------------------------------
+# Timezone: the working window follows where the account appears to be
+# ----------------------------------------------------------------------
+
+from zoneinfo import ZoneInfo  # noqa: E402
+
+from src.accounts import caps as caps_policy  # noqa: E402
+
+KOLKATA = ZoneInfo("Asia/Kolkata")
+
+
+def _indian_proxy_account(caps=None):
+    account = FakeAccount(stage="react", caps=caps)
+    account.proxy = {"url": "http://u:p@gw.example:10000", "timezone": "Asia/Kolkata"}
+    return account
+
+
+def test_proxy_timezone_is_used_when_none_is_set():
+    assert caps_policy.timezone_of(_indian_proxy_account()) == "Asia/Kolkata"
+    assert caps_policy.timezone_of(FakeAccount()) is None
+
+
+def test_an_explicit_timezone_beats_the_proxys():
+    account = _indian_proxy_account(
+        caps={"tier": "standard", "active_hours": [8, 19], "timezone": "Europe/London"}
+    )
+    assert caps_policy.timezone_of(account) == "Europe/London"
+
+
+def test_actions_land_inside_the_window_in_the_proxys_local_time():
+    plan = planner.plan_day(_indian_proxy_account(), day=date(2026, 6, 3))
+    assert plan.actions
+    for item in plan.actions:
+        local = item.at.astimezone(KOLKATA)
+        assert local.date() == date(2026, 6, 3)
+        assert 8 <= local.hour < 19, local
+
+
+def test_today_is_the_accounts_local_day():
+    # 20:00 UTC on 3 June is already 01:30 on 4 June in India.
+    now = datetime(2026, 6, 3, 20, 0, tzinfo=timezone.utc)
+    plan = planner.plan_day(_indian_proxy_account(), now=now)
+    assert plan.day == date(2026, 6, 4)

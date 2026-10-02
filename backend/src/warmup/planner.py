@@ -127,8 +127,9 @@ def plan_day(
     are heavily reduced rather than skipped, because an account that works
     exactly Monday-to-Friday is its own signature.
     """
-    now = now or datetime.now(timezone.utc)
-    day = day or now.date()
+    # The working window and "today" are the account's local ones, not UTC's.
+    local = caps_policy.local_now(account, now)
+    day = day or local.date()
     account_id = str(getattr(account, "id", "unknown"))
 
     stage = program.stage_for(stage_key or current_stage(account))
@@ -169,7 +170,7 @@ def plan_day(
         if count == 0:
             continue
 
-        for at in _scatter(count, start_hour, end_hour, day, rng):
+        for at in _scatter(count, start_hour, end_hour, day, rng, tz=local.tzinfo):
             plan.actions.append(
                 PlannedAction(action=action, at=at, reason=_reason_for(action, stage))
             )

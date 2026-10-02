@@ -201,8 +201,20 @@ def active_hours(account) -> tuple:
 
 
 def timezone_of(account) -> Optional[str]:
-    """IANA timezone the account's active hours are interpreted in."""
-    return _settings(account).get("timezone")
+    """
+    IANA timezone the account's active hours are interpreted in.
+
+    An explicit setting wins. Otherwise the proxy's timezone (recorded when the
+    proxy was checked): LinkedIn judges "normal hours" by where the account
+    appears to be, and that is wherever its proxy exits.
+    """
+    explicit = _settings(account).get("timezone")
+    if explicit:
+        return explicit
+    proxy = getattr(account, "proxy", None)
+    if isinstance(proxy, dict) and proxy.get("timezone"):
+        return proxy["timezone"]
+    return None
 
 
 def _localize(account, now: datetime) -> datetime:
@@ -217,6 +229,11 @@ def _localize(account, now: datetime) -> datetime:
         # An unknown/misconfigured tz name should never crash a status check;
         # it just means the window is read in UTC instead of local time.
         return now
+
+
+def local_now(account, now: Optional[datetime] = None) -> datetime:
+    """``now`` in the account's timezone (UTC when it has none)."""
+    return _localize(account, now or datetime.now(timezone.utc))
 
 
 def in_quiet_hours(account, *, now: Optional[datetime] = None) -> bool:

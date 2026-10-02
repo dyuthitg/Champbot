@@ -90,5 +90,7 @@ async def check(proxy_url: str, *, fetch: Optional[Fetcher] = None) -> dict:
         "ip": first.get("ip"),
         "country": first.get("country"),
         "city": first.get("city"),
+        # The account's active hours follow this unless set explicitly.
+        "timezone": first.get("timezone"),
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }

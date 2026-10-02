@@ -65,3 +65,9 @@ def test_summary_never_includes_credentials():
     assert summary["host"] == "gw.dataimpulse.com:10000"
     assert "secret" not in str(summary) and "login" not in str(summary)
     assert _proxy_summary(None) is None
+
+
+async def test_proxy_timezone_is_recorded():
+    ip = {"ip": "103.1.1.1", "country": "IN", "timezone": "Asia/Kolkata"}
+    result = await proxy_check.check(STICKY, fetch=_fetcher(ip, ip))
+    assert result["timezone"] == "Asia/Kolkata"
