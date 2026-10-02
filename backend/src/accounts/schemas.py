@@ -43,6 +43,9 @@ class AccountUpdate(BaseModel):
     active_icp_id: Optional[str] = None
     daily_caps: Optional[dict] = None
     display_name: Optional[str] = None
+    proxy_url: Optional[str] = Field(
+        None, description="New egress proxy; an empty string removes it"
+    )
 
 
 class AccountRotateAuth(BaseModel):
@@ -74,6 +77,9 @@ class AccountResponse(BaseModel):
     active_icp_id: Optional[str] = None
     policy: dict = Field(default_factory=dict, description="Effective caps + pacing")
     has_credentials: bool = False
+    proxy: Optional[dict] = Field(
+        None, description="host, exit ip, country, city, checked_at -- never credentials"
+    )
     transport: Optional[str] = Field(
         None, description="Which transport verified this account: mobile | browser"
     )

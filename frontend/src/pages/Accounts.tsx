@@ -10,6 +10,7 @@ import { motion } from 'framer-motion';
 import {
   AlertTriangle,
   CheckCircle2,
+  Globe,
   HelpCircle,
   Loader2,
   Plus,
@@ -38,6 +39,11 @@ const STATUS_LABEL: Record<AccountStatus, string> = {
   auth_required: 'Session expired — needs a new cookie',
   error: 'Error',
 };
+
+const PROXY_HINT =
+  'Use a sticky address that stays the same: for DataImpulse, a port from 10000 up ' +
+  '(a different one per account), not 823. A proxy that changes address gets the ' +
+  'account signed out. We test it before saving.';
 
 export function Accounts() {
   const queryClient = useQueryClient();
@@ -126,6 +132,7 @@ function ConnectForm({
   const [jsessionid, setJsessionid] = useState('');
   const [label, setLabel] = useState('');
   const [mode, setMode] = useState<'outreach' | 'account_based_engagement'>('outreach');
+  const [proxyUrl, setProxyUrl] = useState('');
   const [showHelp, setShowHelp] = useState(false);
 
   const connect = useMutation({
@@ -135,6 +142,7 @@ function ConnectForm({
         jsessionid: jsessionid.trim() || undefined,
         label: label.trim() || undefined,
         mode,
+        proxy_url: proxyUrl.trim() || undefined,
       }),
     onSuccess: (account) => {
       if (account.status !== 'active') {
@@ -237,6 +245,19 @@ function ConnectForm({
               Engagement — build presence with people already in the network
             </option>
           </select>
+        </label>
+
+        <label className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-xs text-slate-400">Proxy (recommended)</span>
+          <input
+            type="password"
+            value={proxyUrl}
+            onChange={(e) => setProxyUrl(e.target.value)}
+            placeholder="http://login__cr.in:password@gw.dataimpulse.com:10000"
+            className="input font-mono"
+            autoComplete="off"
+          />
+          <span className="text-xs text-slate-500">{PROXY_HINT}</span>
         </label>
       </div>
 
@@ -390,6 +411,8 @@ function AccountRow({
         </label>
       </div>
 
+      <ProxySetting account={account} onChanged={onChanged} onError={onError} />
+
       <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-xs text-slate-400">
         <span>
           Invites{' '}
@@ -416,6 +439,102 @@ function AccountRow({
           </span>
         </span>
       </div>
+    </div>
+  );
+}
+
+function ProxySetting({
+  account,
+  onChanged,
+  onError,
+}: {
+  account: ConnectedAccount;
+  onChanged: () => void;
+  onError: (message: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [proxyUrl, setProxyUrl] = useState('');
+  const proxy = account.proxy;
+
+  const save = useMutation({
+    mutationFn: (url: string) => accountApi.update(account.id, { proxy_url: url }),
+    onSuccess: () => {
+      setEditing(false);
+      setProxyUrl('');
+      onChanged();
+    },
+    onError: (err: any) =>
+      onError(err?.response?.data?.detail ?? 'Could not save that proxy'),
+  });
+
+  return (
+    <div className="mt-4 pt-4 border-t border-slate-700 text-sm">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex items-center gap-2">
+          <Globe size={15} className={proxy ? 'text-emerald-400' : 'text-amber-400'} />
+          {proxy ? (
+            <span className="text-slate-300 truncate">
+              Proxy <span className="text-slate-100 font-mono">{proxy.host}</span>
+              {proxy.ip && (
+                <span className="text-slate-400">
+                  {' '}· goes out as {proxy.ip}
+                  {(proxy.city || proxy.country) &&
+                    ` (${[proxy.city, proxy.country].filter(Boolean).join(', ')})`}
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="text-amber-200">
+              No proxy. LinkedIn sees the server's address, which can get this account
+              signed out.
+            </span>
+          )}
+        </div>
+        {!editing && (
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={() => setEditing(true)} className="btn-ghost">
+              {proxy ? 'Change' : 'Add proxy'}
+            </button>
+            {proxy && (
+              <button
+                onClick={() => save.mutate('')}
+                disabled={save.isPending}
+                className="btn-ghost text-slate-400"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <input
+              type="password"
+              value={proxyUrl}
+              onChange={(e) => setProxyUrl(e.target.value)}
+              placeholder="http://login__cr.in:password@gw.dataimpulse.com:10000"
+              className="input font-mono flex-1 min-w-0"
+              autoComplete="off"
+              autoFocus
+            />
+            <button
+              onClick={() => save.mutate(proxyUrl.trim())}
+              disabled={save.isPending || !proxyUrl.trim()}
+              className="btn-primary shrink-0"
+            >
+              {save.isPending && <Loader2 size={15} className="animate-spin" />}
+              {save.isPending ? 'Testing…' : 'Test & save'}
+            </button>
+            <button onClick={() => setEditing(false)} className="btn-ghost shrink-0">
+              Cancel
+            </button>
+          </div>
+          <span className="text-xs text-slate-500">{PROXY_HINT}</span>
+        </div>
+      )}
     </div>
   );
 }

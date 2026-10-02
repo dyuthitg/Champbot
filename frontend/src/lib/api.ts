@@ -170,6 +170,8 @@ export const accountApi = {
       active_icp_id: string;
       daily_caps: Record<string, unknown>;
       display_name: string;
+      /** "" removes the proxy. */
+      proxy_url: string;
     }>,
   ): Promise<ConnectedAccount> {
     const { data } = await http.patch(`/accounts/${id}`, payload);
