@@ -16,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  KeyRound,
   Trash2,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -293,6 +294,8 @@ function AccountRow({
   onChanged: () => void;
   onError: (message: string) => void;
 }) {
+  const [showCookie, setShowCookie] = useState(false);
+
   const verify = useMutation({
     mutationFn: () => accountApi.verify(account.id),
     onSuccess: (result) => {
@@ -368,6 +371,17 @@ function AccountRow({
             Verify
           </button>
           <button
+            onClick={() => setShowCookie((v) => !v)}
+            className={clsx(
+              'btn-ghost',
+              account.status === 'auth_required' && 'text-amber-300',
+            )}
+            title="Paste a fresh li_at cookie, keeping all settings"
+          >
+            <KeyRound size={15} />
+            Update cookie
+          </button>
+          <button
             onClick={() => disconnect.mutate()}
             disabled={disconnect.isPending}
             className="btn-ghost text-red-400 hover:bg-red-500/10"
@@ -377,6 +391,18 @@ function AccountRow({
           </button>
         </div>
       </div>
+
+      {showCookie && (
+        <CookieUpdate
+          account={account}
+          onDone={() => {
+            setShowCookie(false);
+            onChanged();
+          }}
+          onCancel={() => setShowCookie(false)}
+          onError={onError}
+        />
+      )}
 
       {/* Policy */}
       <div className="grid gap-4 sm:grid-cols-2 mt-4 pt-4 border-t border-slate-700">
@@ -535,6 +561,91 @@ function ProxySetting({
           <span className="text-xs text-slate-500">{PROXY_HINT}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function CookieUpdate({
+  account,
+  onDone,
+  onCancel,
+  onError,
+}: {
+  account: ConnectedAccount;
+  onDone: () => void;
+  onCancel: () => void;
+  onError: (message: string) => void;
+}) {
+  const [liAt, setLiAt] = useState('');
+  const [jsessionid, setJsessionid] = useState('');
+
+  // Replaces only the session cookies; proxy, caps and warm-up progress stay.
+  const save = useMutation({
+    mutationFn: () =>
+      accountApi.rotateCredentials(account.id, {
+        li_at: liAt.trim(),
+        jsessionid: jsessionid.trim() || undefined,
+      }),
+    onSuccess: (updated) => {
+      if (updated.status !== 'active') {
+        onError(
+          'LinkedIn rejected that cookie. Copy li_at again from a browser where you are signed in.',
+        );
+      }
+      onDone();
+    },
+    onError: (err: any) =>
+      onError(err?.response?.data?.detail ?? 'Could not update the cookie'),
+  });
+
+  return (
+    <div className="mt-4 pt-4 border-t border-slate-700">
+      <p className="text-sm text-slate-300 mb-3">
+        Paste fresh cookies from a browser signed in to LinkedIn. Settings, proxy and
+        warm-up progress are kept.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-400">li_at cookie (required)</span>
+          <input
+            type="password"
+            value={liAt}
+            onChange={(e) => setLiAt(e.target.value)}
+            placeholder="AQEDAT…"
+            className="input font-mono"
+            autoComplete="off"
+            autoFocus
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-400">JSESSIONID (needed to send anything)</span>
+          <input
+            type="password"
+            value={jsessionid}
+            onChange={(e) => setJsessionid(e.target.value)}
+            placeholder="ajax:1234567890"
+            className="input font-mono"
+            autoComplete="off"
+          />
+        </label>
+      </div>
+      <div className="flex items-center gap-2 mt-3">
+        <button
+          onClick={() => save.mutate()}
+          disabled={save.isPending || liAt.trim().length < 20}
+          className="btn-primary"
+        >
+          {save.isPending ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <ShieldCheck size={15} />
+          )}
+          {save.isPending ? 'Checking…' : 'Save & verify'}
+        </button>
+        <button onClick={onCancel} className="btn-ghost">
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
