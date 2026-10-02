@@ -407,3 +407,49 @@ async def test_queued_comment_references_the_post_it_replies_to(
     assert queued is not None
     assert queued.draft_text
     assert queued.rationale and "post" in queued.rationale.lower()
+
+
+# ----------------------------------------------------------------------
+# People can see what it did
+# ----------------------------------------------------------------------
+
+
+async def test_liked_posts_are_listed_with_who_and_what(db, org, account, icp, rate_limiter):
+    """The activity list names the person, shows the post, and links to it."""
+    now = await _ready(db, org, account, icp, "observe", program.LIKE)
+    await runner.run_today(
+        db, account, transport=FeedTransport(), rate_limiter=rate_limiter,
+        live=object(), now=now,
+    )
+
+    items = await warmup_service.recent_activity(db, account, action=program.LIKE)
+
+    assert items
+    for item in items:
+        assert item["status"] == ActivityStatus.OK
+        assert item["person"].endswith("Example")
+        assert item["post_text"].startswith("post ")
+
+
+async def test_failed_likes_are_listed_too(db, org, account, icp, rate_limiter):
+    now = await _ready(db, org, account, icp, "observe", program.LIKE)
+    await runner.run_today(
+        db, account, transport=FeedTransport(fail=True), rate_limiter=rate_limiter,
+        live=object(), now=now,
+    )
+
+    items = await warmup_service.recent_activity(db, account, action=program.LIKE)
+    assert items and all(i["status"] == ActivityStatus.FAILED for i in items)
+
+
+def test_post_links_open_the_post_on_linkedin():
+    assert (
+        warmup_service.post_url("urn:li:activity:7123")
+        == "https://www.linkedin.com/feed/update/urn:li:activity:7123/"
+    )
+    # Feed responses sometimes wrap the post id inside a longer urn.
+    assert warmup_service.post_url(
+        "urn:li:fsd_update:(urn:li:activity:7123,MEMBER_SHARES,EMPTY,DEFAULT,false)"
+    ) == "https://www.linkedin.com/feed/update/urn:li:activity:7123/"
+    assert warmup_service.post_url("urn:li:member:42") is None
+    assert warmup_service.post_url(None) is None

@@ -26,6 +26,7 @@ import type {
   TargetImportItem,
   WarmupProgram,
   WarmupStatus,
+  WarmupActivityItem,
   WarmupToday,
 } from '@/types';
 
@@ -169,6 +170,8 @@ export const accountApi = {
       active_icp_id: string;
       daily_caps: Record<string, unknown>;
       display_name: string;
+      /** "" removes the proxy. */
+      proxy_url: string;
     }>,
   ): Promise<ConnectedAccount> {
     const { data } = await http.patch(`/accounts/${id}`, payload);
@@ -351,6 +354,13 @@ export const warmupApi = {
   async today(accountId: string): Promise<WarmupToday> {
     const { data } = await http.get(`/warmup/accounts/${accountId}/today`);
     return data as WarmupToday;
+  },
+
+  async activity(accountId: string, action?: string): Promise<WarmupActivityItem[]> {
+    const { data } = await http.get(`/warmup/accounts/${accountId}/activity`, {
+      params: action ? { action } : undefined,
+    });
+    return (data?.items ?? []) as WarmupActivityItem[];
   },
 
   async pause(accountId: string, paused: boolean, reason = ''): Promise<void> {

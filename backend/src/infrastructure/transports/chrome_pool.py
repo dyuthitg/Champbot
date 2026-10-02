@@ -16,7 +16,10 @@ mismatch LinkedIn's fraud detection watches for.
 Proxy credentials: Chrome's ``--proxy-server`` flag has no way to carry
 ``user:pass``. When ``account.proxy["url"]`` has credentials, the pool starts a
 local no-auth forwarder (``pproxy``) on loopback that adds them upstream, and
-points Chrome at the forwarder instead.
+points Chrome at the forwarder instead. The credentials reach pproxy through a
+0600 file (``host:port##/path``), not its argv: pproxy splits its whole ``-r``
+value on ``__`` to chain proxies, which mangles logins like DataImpulse's
+``LOGIN__cr.in``, and argv is visible to every process on the box anyway.
 
 Every process launch goes through an injectable ``launcher`` and readiness
 goes through an injectable ``probe``, so tests never spawn anything.
@@ -93,28 +96,30 @@ def find_chrome() -> Optional[str]:
     return None
 
 
-def proxy_plan(proxy_url: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+def proxy_plan(
+    proxy_url: Optional[str],
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Decide how Chrome reaches the account's proxy.
 
-    Returns ``(chrome_proxy_server, forwarder_remote)``:
-    - no proxy            -> ``(None, None)``
-    - proxy without creds -> ``("scheme://host:port", None)``, Chrome dials it directly
-    - proxy with creds    -> ``(None, "scheme://host:port#user:pass")``, a pproxy
+    Returns ``(chrome_proxy_server, forwarder_remote, forwarder_auth)``:
+    - no proxy            -> ``(None, None, None)``
+    - proxy without creds -> ``("scheme://host:port", None, None)``, Chrome dials it directly
+    - proxy with creds    -> ``(None, "scheme://host:port", "user:pass")``, a pproxy
       forwarder is needed; the caller fills in Chrome's server once the
       forwarder's local port is known.
     """
     if not proxy_url:
-        return None, None
+        return None, None, None
     parsed = urllib.parse.urlsplit(proxy_url)
     scheme = parsed.scheme or "http"
     host = parsed.hostname or ""
     netloc = f"{host}:{parsed.port}" if parsed.port else host
     if not parsed.username:
-        return f"{scheme}://{netloc}", None
+        return f"{scheme}://{netloc}", None, None
     user = urllib.parse.unquote(parsed.username)
     password = urllib.parse.unquote(parsed.password or "")
-    return None, f"{scheme}://{netloc}#{user}:{password}"
+    return None, f"{scheme}://{netloc}", f"{user}:{password}"
 
 
 def chrome_argv(
@@ -157,6 +162,17 @@ async def _default_launcher(argv: list):
     )
 
 
+async def _default_port_probe(port: int) -> bool:
+    def _check() -> bool:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                return True
+        except OSError:
+            return False
+
+    return await asyncio.to_thread(_check)
+
+
 async def _default_probe(cdp_url: str) -> bool:
     def _check() -> bool:
         try:
@@ -176,6 +192,8 @@ class ChromeHandle:
     chrome: Any
     forwarder: Any = None
     last_used: float = field(default_factory=time.monotonic)
+    proxy_url: Optional[str] = None
+    proxy_auth_file: Optional[Path] = None
 
     def alive(self) -> bool:
         return getattr(self.chrome, "returncode", None) is None
@@ -204,6 +222,7 @@ class ChromePool:
         headless: Optional[bool] = None,
         launcher: Launcher = _default_launcher,
         probe: Probe = _default_probe,
+        port_probe: Callable[[int], Awaitable[bool]] = _default_port_probe,
         chrome_bin: Optional[str] = None,
         clock: Callable[[], float] = time.monotonic,
         on_release: Optional[OnRelease] = None,
@@ -219,6 +238,7 @@ class ChromePool:
         )
         self._launcher = launcher
         self._probe = probe
+        self._port_probe = port_probe
         self._chrome_bin = chrome_bin
         self._clock = clock
         self.on_release = on_release
@@ -234,14 +254,17 @@ class ChromePool:
         lock = self._locks.setdefault(account_id, asyncio.Lock())
         async with lock:
             handle = self._handles.get(account_id)
-            if handle is not None and handle.alive():
+            proxy = getattr(account, "proxy", None)
+            proxy_url = proxy.get("url") if isinstance(proxy, dict) else None
+            if handle is not None and handle.alive() and handle.proxy_url == proxy_url:
                 handle.last_used = self._clock()
                 return handle
             if handle is not None:
-                # Chrome died underneath us; clean up and relaunch.
+                # Chrome died underneath us, or the account's proxy changed
+                # (a Chrome's proxy is fixed at launch); clean up and relaunch.
                 self._handles.pop(account_id, None)
                 await self._release(handle)
-            handle = await self._launch(account_id, getattr(account, "proxy", None))
+            handle = await self._launch(account_id, proxy)
             self._handles[account_id] = handle
             return handle
 
@@ -253,14 +276,24 @@ class ChromePool:
             )
 
         proxy_url = proxy.get("url") if isinstance(proxy, dict) else None
-        proxy_server, forwarder_remote = proxy_plan(proxy_url)
+        proxy_server, forwarder_remote, forwarder_auth = proxy_plan(proxy_url)
         forwarder = None
+        auth_file = None
         if forwarder_remote:
+            auth_file = self._write_proxy_auth(account_id, forwarder_auth)
             local_port = _free_port()
             forwarder = await self._launcher(
                 [harness_python(), "-m", "pproxy", "-l", f"http://127.0.0.1:{local_port}",
-                 "-r", forwarder_remote, "-q"]
+                 "-r", f"{forwarder_remote}##{auth_file}"]
             )
+            # Fail here, loudly, rather than hand Chrome a dead loopback proxy.
+            deadline = self._clock() + _READY_TIMEOUT_SECONDS
+            while not await self._port_probe(local_port):
+                if getattr(forwarder, "returncode", None) is not None or self._clock() > deadline:
+                    await _stop(forwarder)
+                    auth_file.unlink(missing_ok=True)
+                    raise TransportUnavailable("the proxy forwarder (pproxy) did not start")
+                await asyncio.sleep(0.25)
             proxy_server = f"http://127.0.0.1:{local_port}"
 
         port = _free_port()
@@ -277,6 +310,8 @@ class ChromePool:
             proc = await self._launcher(argv)
         except (OSError, FileNotFoundError) as exc:
             await _stop(forwarder)
+            if auth_file:
+                auth_file.unlink(missing_ok=True)
             raise TransportUnavailable(f"could not launch Chrome: {exc}") from exc
 
         cdp_url = f"http://127.0.0.1:{port}"
@@ -285,6 +320,8 @@ class ChromePool:
             if getattr(proc, "returncode", None) is not None or self._clock() > deadline:
                 await _stop(proc)
                 await _stop(forwarder)
+                if auth_file:
+                    auth_file.unlink(missing_ok=True)
                 raise TransportUnavailable("Chrome did not expose its DevTools endpoint in time")
             await asyncio.sleep(0.25)
 
@@ -295,7 +332,23 @@ class ChromePool:
             chrome=proc,
             forwarder=forwarder,
             last_used=self._clock(),
+            proxy_url=proxy_url,
+            proxy_auth_file=auth_file,
         )
+
+    def _write_proxy_auth(self, account_id: str, auth: str) -> Path:
+        """Owner-only file pproxy reads the upstream ``user:pass`` from."""
+        path = (self._data_dir / f"{_safe_dirname(account_id)}.proxy-auth").resolve()
+        if "__" in str(path):
+            # pproxy splits its whole -r value on "__", this path included.
+            raise TransportUnavailable(
+                f"CHROME_DATA_DIR must not contain '__' (proxy forwarder limitation): {path}"
+            )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(auth)
+        return path
 
     def touch(self, handle: ChromeHandle) -> None:
         handle.last_used = self._clock()
@@ -325,6 +378,8 @@ class ChromePool:
                 pass  # best effort: never let cleanup block stopping Chrome
         await _stop(handle.chrome)
         await _stop(handle.forwarder)
+        if handle.proxy_auth_file:
+            handle.proxy_auth_file.unlink(missing_ok=True)
 
     async def close(self) -> None:
         for account_id in list(self._handles):

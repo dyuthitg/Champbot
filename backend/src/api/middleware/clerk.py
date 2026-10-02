@@ -74,7 +74,7 @@ class ClerkVerifier:
                     return jwt.algorithms.RSAAlgorithm.from_jwk(key)
             raise HTTPException(status_code=401, detail="Unknown signing key")
         if not self.config.jwks_url:
-            raise HTTPException(status_code=500, detail="CLERK_JWKS_URL not configured")
+            raise HTTPException(status_code=503, detail="CLERK_JWKS_URL not configured")
         if self._jwk_client is None:
             self._jwk_client = PyJWKClient(self.config.jwks_url)
         return self._jwk_client.get_signing_key_from_jwt(token).key

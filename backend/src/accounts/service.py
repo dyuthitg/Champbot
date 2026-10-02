@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.accounts import caps as caps_policy
+from src.accounts import proxy_check
 from src.accounts.crypto import decrypt_auth, encrypt_auth
 from src.accounts.models import AccountStatus, ConnectedAccount, EngagementMode
 from src.accounts.schemas import AccountResponse
@@ -30,6 +31,15 @@ logger = logging.getLogger(__name__)
 
 class AccountError(Exception):
     """Account operation failed in a way the caller should surface."""
+
+
+async def _checked_proxy(proxy_url: Optional[str]) -> Optional[dict]:
+    """Validate and live-test a proxy; ``None`` for no proxy. Raises AccountError."""
+    try:
+        url = proxy_check.normalize(proxy_url)
+        return await proxy_check.check(url) if url else None
+    except proxy_check.ProxyCheckError as exc:
+        raise AccountError(str(exc)) from exc
 
 
 class LiveAccount:
@@ -119,6 +129,9 @@ async def connect_account(
     account — in ``auth_required`` status with a recorded error — so the user
     can fix the cookie instead of losing their configuration.
     """
+    # Before the row exists: a bad proxy is a 400, not a half-made account.
+    proxy = await _checked_proxy(payload.proxy_url)
+
     record = ConnectedAccount(
         id=uuid.uuid4(),
         org_id=uuid.UUID(str(org_id)),
@@ -136,7 +149,7 @@ async def connect_account(
     # A stable device identity, derived from the account id so it survives
     # restarts and is never regenerated (LinkedIn ties trust to device stability).
     record.device_fingerprint = generate_fingerprint(str(record.id))
-    record.proxy = {"url": payload.proxy_url} if payload.proxy_url else None
+    record.proxy = proxy
 
     caps = caps_policy.default_caps_payload()
     if payload.timezone:
@@ -284,6 +297,9 @@ async def update_account(
         merged = dict(record.daily_caps or {})
         merged.update(payload.daily_caps)
         record.daily_caps = merged
+    if payload.proxy_url is not None:
+        # "" clears it. The running Chrome notices the change and relaunches.
+        record.proxy = await _checked_proxy(payload.proxy_url)
 
     await db.commit()
     await db.refresh(record)
@@ -342,6 +358,19 @@ async def check_health(
     }
 
 
+def _proxy_summary(proxy: Optional[dict]) -> Optional[dict]:
+    """What the UI may see about a proxy: never the login or password."""
+    if not isinstance(proxy, dict) or not proxy.get("url"):
+        return None
+    return {
+        "host": proxy_check.redact(proxy["url"]),
+        "ip": proxy.get("ip"),
+        "country": proxy.get("country"),
+        "city": proxy.get("city"),
+        "checked_at": proxy.get("checked_at"),
+    }
+
+
 def to_response(record: ConnectedAccount) -> AccountResponse:
     """Serialize an account, deliberately omitting all auth material."""
     meta = (record.daily_caps or {}).get("_meta") or {}
@@ -358,6 +387,7 @@ def to_response(record: ConnectedAccount) -> AccountResponse:
         active_icp_id=str(record.active_icp_id) if record.active_icp_id else None,
         policy=caps_policy.describe(record),
         has_credentials=bool(record.auth_blob),
+        proxy=_proxy_summary(record.proxy),
         transport=meta.get("verified_via"),
         last_post_at=record.last_post_at,
         last_active_at=record.last_active_at,

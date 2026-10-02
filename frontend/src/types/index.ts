@@ -173,6 +173,14 @@ export interface AccountPolicy {
   warmup: boolean;
 }
 
+export interface AccountProxy {
+  host: string;
+  ip?: string;
+  country?: string;
+  city?: string;
+  checked_at?: string;
+}
+
 export interface ConnectedAccount {
   id: string;
   org_id: string;
@@ -186,6 +194,8 @@ export interface ConnectedAccount {
   active_icp_id?: string;
   policy: AccountPolicy;
   has_credentials: boolean;
+  /** Never includes the proxy login/password. */
+  proxy?: AccountProxy | null;
   transport?: string;
   last_post_at?: string;
   last_active_at?: string;
@@ -522,6 +532,19 @@ export interface PlannedAction {
   action: string;
   at: string;
   reason: string;
+}
+
+// One thing an account actually did (or tried to), from the activity ledger.
+export interface WarmupActivityItem {
+  id: string;
+  action: string;
+  status: 'ok' | 'failed' | 'blocked';
+  stage: string | null;
+  at: string | null;
+  person: string | null;
+  post_text: string | null;
+  url: string | null;
+  error: string | null;
 }
 
 export interface WarmupToday extends WarmupStatus {

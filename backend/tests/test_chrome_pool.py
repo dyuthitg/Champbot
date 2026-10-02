@@ -53,6 +53,10 @@ def _pool(tmp_path, **kwargs):
     async def probe(cdp_url):
         return True
 
+    async def port_probe(port):
+        return True
+
+    kwargs.setdefault("port_probe", port_probe)
     pool = ChromePool(
         data_dir=tmp_path,
         launcher=launcher,
@@ -65,18 +69,19 @@ def _pool(tmp_path, **kwargs):
 
 
 def test_proxy_plan_without_credentials_goes_direct():
-    assert proxy_plan("http://10.0.0.1:8080") == ("http://10.0.0.1:8080", None)
+    assert proxy_plan("http://10.0.0.1:8080") == ("http://10.0.0.1:8080", None, None)
 
 
 def test_proxy_plan_with_credentials_needs_a_forwarder():
     assert proxy_plan("http://us%40r:p%3Ass@10.0.0.1:8080") == (
         None,
-        "http://10.0.0.1:8080#us@r:p:ss",
+        "http://10.0.0.1:8080",
+        "us@r:p:ss",
     )
 
 
 def test_proxy_plan_none():
-    assert proxy_plan(None) == (None, None)
+    assert proxy_plan(None) == (None, None, None)
 
 
 async def test_launches_one_chrome_per_account_and_reuses_it(tmp_path):
@@ -114,7 +119,12 @@ async def test_authenticated_proxy_goes_through_a_local_forwarder(tmp_path):
 
     forwarder, chrome = launched
     assert "pproxy" in forwarder.argv
-    assert "http://10.0.0.1:8080#user:secret" in forwarder.argv
+    remote = forwarder.argv[forwarder.argv.index("-r") + 1]
+    host, _, auth_path = remote.partition("##")
+    assert host == "http://10.0.0.1:8080"
+    # Credentials go via a file, never argv (pproxy splits argv on "__").
+    assert not any("secret" in a for a in forwarder.argv)
+    assert open(auth_path, encoding="utf-8").read() == "user:secret"
     local = forwarder.argv[forwarder.argv.index("-l") + 1]
     assert local.startswith("http://127.0.0.1:")
     # Chrome only ever sees the credential-free loopback forwarder.
@@ -201,3 +211,44 @@ async def test_chrome_that_never_gets_ready_is_unavailable(tmp_path, monkeypatch
     with pytest.raises(TransportUnavailable, match="DevTools"):
         await pool.get(_account())
     assert launched[0].terminated
+
+
+async def test_changing_the_accounts_proxy_relaunches_its_chrome(tmp_path):
+    pool, launched = _pool(tmp_path)
+
+    first = await pool.get(_account(proxy={"url": "http://10.0.0.1:8080"}))
+    same = await pool.get(_account(proxy={"url": "http://10.0.0.1:8080"}))
+    moved = await pool.get(_account(proxy={"url": "http://10.0.0.2:9090"}))
+
+    assert first is same
+    assert moved is not first
+    assert first.chrome.terminated
+    assert "--proxy-server=http://10.0.0.2:9090" in launched[-1].argv
+
+
+async def test_dataimpulse_style_login_survives_the_forwarder(tmp_path):
+    pool, launched = _pool(tmp_path)
+
+    handle = await pool.get(
+        _account(proxy={"url": "http://login__cr.in:pw@gw.dataimpulse.com:10000"})
+    )
+
+    remote = launched[0].argv[launched[0].argv.index("-r") + 1]
+    assert "__" not in remote
+    assert handle.proxy_auth_file.read_text(encoding="utf-8") == "login__cr.in:pw"
+    await pool.close()
+    assert not handle.proxy_auth_file.exists()
+
+
+async def test_forwarder_that_never_listens_is_unavailable(tmp_path):
+    clock = FakeClock()
+
+    async def never(port):
+        clock.now += 100
+        return False
+
+    pool, launched = _pool(tmp_path, clock=clock, port_probe=never)
+    with pytest.raises(TransportUnavailable, match="forwarder"):
+        await pool.get(_account(proxy={"url": "http://u:p@10.0.0.1:8080"}))
+    assert launched[0].terminated
+    assert list(tmp_path.glob("*.proxy-auth")) == []

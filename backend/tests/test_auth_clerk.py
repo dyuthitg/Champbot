@@ -135,3 +135,14 @@ async def test_clerk_org_token_groups_users(client, keypair):
     r2 = await client.get("/api/v1/me", headers={"Authorization": f"Bearer {t2}"})
     assert r1.json()["org_id"] == r2.json()["org_id"]
     assert r1.json()["user_id"] != r2.json()["user_id"]
+
+
+def test_missing_jwks_url_is_503_not_500(keypair):
+    # A deployment with no CLERK_JWKS_URL is misconfigured, not crashing.
+    from fastapi import HTTPException
+
+    private_key, _ = keypair
+    verifier = ClerkVerifier(ClerkConfig(jwks_url=""))
+    with pytest.raises(HTTPException) as exc_info:
+        verifier.verify(make_token(private_key))
+    assert exc_info.value.status_code == 503

@@ -9,8 +9,9 @@ being able to show someone the ramp before they connect an account is the point.
 from __future__ import annotations
 
 import os
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,6 +90,22 @@ async def account_today(
     if account is None:
         raise HTTPException(status_code=404, detail="Account not found")
     return await warmup_service.today(db, account)
+
+
+@router.get("/accounts/{account_id}/activity")
+async def account_activity(
+    account_id: str,
+    action: Optional[str] = Query(None, description="Only this action, e.g. 'like'"),
+    limit: int = Query(50, ge=1, le=200),
+    ctx: RequestContext = Depends(get_request_context),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """What this account has actually done, newest first (including failures)."""
+    account = await accounts_service.get_account_record(db, account_id, ctx.org_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    items = await warmup_service.recent_activity(db, account, action=action, limit=limit)
+    return {"items": items}
 
 
 @router.post("/accounts/{account_id}/run")
