@@ -27,6 +27,7 @@ import type {
   WarmupProgram,
   WarmupStatus,
   WarmupActivityItem,
+  WarmupRunResult,
   WarmupToday,
 } from '@/types';
 
@@ -361,6 +362,12 @@ export const warmupApi = {
       params: action ? { action } : undefined,
     });
     return (data?.items ?? []) as WarmupActivityItem[];
+  },
+
+  /** Do whatever is due right now (likes/follows run, comments get queued). */
+  async run(accountId: string): Promise<WarmupRunResult> {
+    const { data } = await http.post(`/warmup/accounts/${accountId}/run`);
+    return data as WarmupRunResult;
   },
 
   async pause(accountId: string, paused: boolean, reason = ''): Promise<void> {

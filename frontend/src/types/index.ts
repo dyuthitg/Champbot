@@ -574,3 +574,12 @@ export interface PreflightReport {
   next_steps: string[];
   checks: PreflightCheck[];
 }
+
+/** What one "run now" of the warm-up did. ``skipped`` is keyed by reason. */
+export interface WarmupRunResult {
+  performed: { action: string; [key: string]: unknown }[];
+  queued_for_review?: number;
+  skipped: Record<string, number>;
+  stage?: string;
+  message: string;
+}
