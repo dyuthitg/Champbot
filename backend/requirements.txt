@@ -70,3 +70,7 @@ pytest-cov>=5.0,<6
 pytest-mock>=3.12,<4
 fakeredis>=2.21,<3
 faker>=24.0,<25
+
+# zoneinfo needs a tz database; slim images and Windows may have none, and
+# without it account timezones silently fall back to UTC.
+tzdata>=2024.1

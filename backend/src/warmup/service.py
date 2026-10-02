@@ -27,6 +27,7 @@ from typing import Any, List, Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.accounts import caps as caps_policy
 from src.outreach import health as health_module
 from src.warmup import planner, program
 from src.warmup.models import AccountActivity, ActivityStatus
@@ -164,7 +165,11 @@ async def today(
     suspended = set(assessment["health"].get("suspended_actions") or [])
 
     plan = planner.plan_day(
-        account, day=now.date(), stage_key=assessment["stage"], throttle=throttle, now=now
+        account,
+        day=caps_policy.local_now(account, now).date(),
+        stage_key=assessment["stage"],
+        throttle=throttle,
+        now=now,
     )
 
     actions = [
@@ -196,8 +201,11 @@ async def today(
 
 
 async def _done_today(db: AsyncSession, account, now: datetime) -> dict:
-    """What the account has already done since midnight, by action."""
-    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    """What the account has already done since its local midnight, by action."""
+    local = caps_policy.local_now(account, now)
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(
+        timezone.utc
+    )
     rows = (
         await db.execute(
             select(AccountActivity.action, func.count())

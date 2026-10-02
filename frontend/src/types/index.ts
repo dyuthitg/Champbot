@@ -170,6 +170,8 @@ export interface AccountPolicy {
   actions: Record<string, ActionCaps>;
   suggestion_budget: number;
   active_hours: [number, number];
+  /** IANA name; the account's own setting, else its proxy's. */
+  timezone?: string;
   warmup: boolean;
 }
 
