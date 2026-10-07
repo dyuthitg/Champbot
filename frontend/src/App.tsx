@@ -2,15 +2,12 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
 import { Account } from './pages/Account';
-import { Accounts } from './pages/Accounts';
-import { AgentMonitor } from './pages/AgentMonitor';
+import { AccountsAndAgents } from './pages/AccountsAndAgents';
 import { Approvals } from './pages/Approvals';
 import { CampaignDetail } from './pages/CampaignDetail';
-import { CampaignList } from './pages/CampaignList';
 import { CreateCampaign } from './pages/CreateCampaign';
 import { Dashboard } from './pages/Dashboard';
-import { Targeting } from './pages/Targeting';
-import { Warmup } from './pages/Warmup';
+import { TargetingAndCampaigns } from './pages/TargetingAndCampaigns';
 import { Navigation } from './components/Navigation';
 
 // Create React Query client
@@ -54,13 +51,13 @@ function AnimatedRoutes() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Page><Dashboard /></Page>} />
         <Route path="/approvals" element={<Page><Approvals /></Page>} />
-        <Route path="/accounts" element={<Page><Accounts /></Page>} />
-        <Route path="/warmup" element={<Page><Warmup /></Page>} />
-        <Route path="/targeting" element={<Page><Targeting /></Page>} />
-        <Route path="/campaigns" element={<Page><CampaignList /></Page>} />
+        <Route path="/accounts" element={<Page><AccountsAndAgents /></Page>} />
+        <Route path="/warmup" element={<Page><AccountsAndAgents /></Page>} />
+        <Route path="/agents" element={<Page><AccountsAndAgents /></Page>} />
+        <Route path="/targeting" element={<Page><TargetingAndCampaigns /></Page>} />
+        <Route path="/campaigns" element={<Page><TargetingAndCampaigns /></Page>} />
         <Route path="/campaigns/new" element={<Page><CreateCampaign /></Page>} />
         <Route path="/campaigns/:id" element={<Page><CampaignDetail /></Page>} />
-        <Route path="/agents" element={<Page><AgentMonitor /></Page>} />
         <Route path="/account" element={<Page><Account /></Page>} />
         {/* Catch-all redirect */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

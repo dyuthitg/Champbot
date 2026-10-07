@@ -38,6 +38,12 @@ const STATUS_DOT: Record<CampaignStatus, string> = {
   cancelled: 'bg-slate-500',
 };
 
+// Animates the real <button> directly instead of wrapping it in a
+// motion.div -- a wrapper div with whileTap becomes its own tab stop
+// (framer-motion adds tabIndex for tap-gesture keyboard support), which
+// left the button reachable twice in a row with nothing on the first stop.
+const MotionButton = motion(Button);
+
 const ACTION_LABELS: { key: 'like' | 'comment' | 'share' | 'follow'; label: string }[] = [
   { key: 'like', label: 'Like' },
   { key: 'comment', label: 'Comment' },
@@ -120,7 +126,7 @@ export function CampaignDetail() {
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={clsx('w-2.5 h-2.5 rounded-full shrink-0', STATUS_DOT[campaign.status])} />
-            <h1 className="text-2xl font-semibold text-slate-100 truncate">{campaign.name}</h1>
+            <h1 className="font-display text-2xl font-semibold text-slate-100 truncate">{campaign.name}</h1>
             <Chip tone="neutral" className="capitalize">{campaign.status}</Chip>
           </div>
           {campaign.description && (
@@ -133,31 +139,31 @@ export function CampaignDetail() {
         </div>
 
         {(campaign.status === 'draft' || campaign.status === 'paused' || isRunning) && (
-          <motion.div whileHover={reduced || isBusy ? undefined : { scale: 1.03 }} whileTap={reduced || isBusy ? undefined : { scale: 0.97 }}>
-            <Button
-              variant={isRunning ? 'ghost' : 'success'}
-              icon={
-                isBusy ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : isRunning ? (
-                  <Pause size={15} />
-                ) : (
-                  <Play size={15} />
-                )
-              }
-              disabled={isBusy}
-              onClick={() => (isRunning ? pauseMutation.mutate() : startMutation.mutate())}
-              className="shrink-0 whitespace-nowrap"
-            >
-              {isRunning ? 'Pause campaign' : 'Start campaign'}
-            </Button>
-          </motion.div>
+          <MotionButton
+            whileHover={reduced || isBusy ? undefined : { scale: 1.03 }}
+            whileTap={reduced || isBusy ? undefined : { scale: 0.97 }}
+            variant={isRunning ? 'ghost' : 'success'}
+            icon={
+              isBusy ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : isRunning ? (
+                <Pause size={15} />
+              ) : (
+                <Play size={15} />
+              )
+            }
+            disabled={isBusy}
+            onClick={() => (isRunning ? pauseMutation.mutate() : startMutation.mutate())}
+            className="shrink-0 whitespace-nowrap"
+          >
+            {isRunning ? 'Pause campaign' : 'Start campaign'}
+          </MotionButton>
         )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3 mb-6">
         <Card className="text-center">
-          <div className="text-2xl font-semibold text-foreground">{campaign.progress.total_tasks}</div>
+          <div className="font-display text-2xl font-semibold text-foreground">{campaign.progress.total_tasks}</div>
           <div className="text-xs text-muted uppercase tracking-wide mt-1">Total</div>
         </Card>
         <Card className="text-center">

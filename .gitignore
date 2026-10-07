@@ -130,8 +130,8 @@ dmypy.json
 
 # LinkedIn Multi-Agent System specific
 # Configuration files with sensitive data
-config/config.json
-config/production_config.json
+backend/config/config.json
+backend/config/production_config.json
 
 # Encryption keys
 .encryption_key
@@ -171,7 +171,7 @@ Thumbs.db
 .dockerignore
 
 # Kubernetes secrets
-deployment/kubernetes/secrets.yaml
+backend/deployment/kubernetes/secrets.yaml
 
 # Temporary files
 tmp/
@@ -196,3 +196,10 @@ frontend/node_modules/
 
 test_campaigns.db
 *.db
+
+# Claude-in-Chrome / Playwright MCP scratch output -- screenshots and page
+# dumps from live-verification during development, not project artifacts.
+# A prior commit swept the whole directory in by accident; see the commit
+# that added this line for the cleanup.
+.playwright-mcp/
+targeting-page.png

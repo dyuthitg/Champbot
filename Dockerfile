@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
@@ -45,17 +45,17 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Application code
-COPY src/ ./src/
-COPY main.py ./
+COPY backend/src/ ./src/
+COPY backend/main.py ./
 
 # Migration tooling: the CMD below runs scripts/migrate.py before serving, and
 # that script shells out to Alembic, which needs its config and script
 # directory. All three were missing from every previous build of this image --
 # the container passed its healthcheck-adjacent build step but crashed on
 # every boot with "No such file or directory: scripts/migrate.py".
-COPY scripts/migrate.py ./scripts/migrate.py
-COPY alembic.ini ./alembic.ini
-COPY alembic/ ./alembic/
+COPY backend/scripts/migrate.py ./scripts/migrate.py
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic/ ./alembic/
 
 # Built SPA (served by FastAPI at /)
 COPY --from=frontend /app/frontend/dist ./frontend/dist

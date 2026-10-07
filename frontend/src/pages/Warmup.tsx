@@ -102,7 +102,7 @@ export function Warmup() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">Warm-up</h1>
+          <h1 className="font-display text-2xl font-semibold text-slate-100">Warm-up</h1>
           <p className="text-slate-400 mt-1">
             A new account earns its way to outreach over about{' '}
             {programme?.minimum_days_to_outreach ?? 21} days. Nothing is skipped.
