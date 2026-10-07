@@ -67,6 +67,7 @@ interface PendingAction {
   editedText?: string;
   reason?: string;
   suppressTarget?: boolean;
+  commentProblem?: boolean;
   timer: ReturnType<typeof window.setTimeout>;
 }
 
@@ -194,8 +195,12 @@ export function Approvals() {
     id: string;
     name: string;
     suppressTarget: boolean;
+    isComment: boolean;
   } | null>(null);
   const [rejectReasonText, setRejectReasonText] = useState('');
+  // Step-down rule: ticking this puts the account back to checking every
+  // comment. A poor-fit skip (wrong post, bad timing) leaves it unticked.
+  const [rejectCommentProblem, setRejectCommentProblem] = useState(false);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
@@ -384,7 +389,12 @@ export function Approvals() {
       if (action.kind === 'approve') {
         await outreachApi.approve(action.suggestionId, action.editedText);
       } else {
-        await outreachApi.reject(action.suggestionId, action.reason ?? '', action.suppressTarget ?? false);
+        await outreachApi.reject(
+          action.suggestionId,
+          action.reason ?? '',
+          action.suppressTarget ?? false,
+          action.commentProblem ?? false,
+        );
       }
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? `Could not ${action.kind} ${action.name}`);
@@ -400,7 +410,7 @@ export function Approvals() {
   const scheduleAction = (
     suggestion: Suggestion,
     kind: 'approve' | 'reject',
-    extra?: { editedText?: string; reason?: string; suppressTarget?: boolean },
+    extra?: { editedText?: string; reason?: string; suppressTarget?: boolean; commentProblem?: boolean },
   ) => {
     const key = `${kind}-${suggestion.id}-${Date.now()}`;
     const action: PendingAction = {
@@ -425,10 +435,12 @@ export function Approvals() {
 
   const openRejectPrompt = (suggestion: Suggestion, suppressTarget: boolean) => {
     setRejectReasonText('');
+    setRejectCommentProblem(false);
     setRejectDraft({
       id: suggestion.id,
       name: suggestion.target?.full_name ?? 'this person',
       suppressTarget,
+      isComment: suggestion.action === 'comment',
     });
   };
 
@@ -439,6 +451,7 @@ export function Approvals() {
       scheduleAction(suggestion, 'reject', {
         reason: rejectReasonText.trim(),
         suppressTarget: rejectDraft.suppressTarget,
+        commentProblem: rejectDraft.isComment && rejectCommentProblem,
       });
     }
     setRejectDraft(null);
@@ -785,7 +798,8 @@ export function Approvals() {
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-full max-w-lg px-4">
           {/* Stacked on a phone: at 390px the label, the input and the button
               side by side left the input about 40px wide. */}
-          <div className="rounded-lg border border-danger/60 bg-slate-900 shadow-xl p-3 flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="rounded-lg border border-danger/60 bg-slate-900 shadow-xl p-3 flex flex-col gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <span className="text-sm text-foreground sm:shrink-0">
               Why skip {rejectDraft.name}
               {rejectDraft.suppressTarget ? ' — and never contact again' : ''}?
@@ -815,6 +829,23 @@ export function Approvals() {
             >
               Reject
             </Button>
+          </div>
+          {rejectDraft.isComment && (
+            <label className="flex items-start gap-2 text-xs text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rejectCommentProblem}
+                onChange={(e) => setRejectCommentProblem(e.target.checked)}
+                className="mt-0.5 accent-red-500"
+              />
+              <span>
+                The comment itself was wrong, off-tone or unsafe
+                <span className="block text-slate-500">
+                  Puts this account back to checking every comment
+                </span>
+              </span>
+            </label>
+          )}
           </div>
         </div>
       )}

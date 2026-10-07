@@ -306,12 +306,18 @@ export const outreachApi = {
     return data as Suggestion;
   },
 
-  async reject(id: string, reason: string, suppressTarget = false): Promise<Suggestion> {
+  async reject(
+    id: string,
+    reason: string,
+    suppressTarget = false,
+    commentProblem = false,
+  ): Promise<Suggestion> {
     // reason is required by the backend now (RejectRequest.reason) -- it's
     // the data that improves the prompt later, not optional metadata.
     const { data } = await http.post(`/outreach/suggestions/${id}/reject`, {
       reason,
       suppress_target: suppressTarget,
+      comment_problem: commentProblem,
     });
     return data as Suggestion;
   },
@@ -338,6 +344,12 @@ export const outreachApi = {
   async dashboard(): Promise<Dashboard> {
     const { data } = await http.get('/outreach/dashboard');
     return data as Dashboard;
+  },
+
+  /** Step-down rule: a bad comment already posted, so check every comment again. */
+  async resetApproval(accountId: string, reason: string): Promise<{ returned_to_review: number }> {
+    const { data } = await http.post(`/outreach/accounts/${accountId}/approval/reset`, { reason });
+    return data;
   },
 };
 

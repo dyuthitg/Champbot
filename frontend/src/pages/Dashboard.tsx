@@ -4,7 +4,8 @@
 // review, what's queued, what went out today, and how much headroom is left
 // under each account's caps.
 
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -19,6 +20,7 @@ import {
   Moon,
   Plus,
   Send,
+  ShieldCheck,
   Sparkles,
   UserPlus,
   Users,
@@ -29,7 +31,8 @@ import { formatDistanceToNow, isToday, isYesterday } from 'date-fns';
 import { outreachApi } from '@/lib/api';
 import { useGeneralWebSocket } from '@/hooks/useWebSocket';
 import { Chip } from '@/components/ui/Chip';
-import type { AccountStats } from '@/types';
+import { Button } from '@/components/ui/Button';
+import type { AccountStats, ApprovalLevel } from '@/types';
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
@@ -548,6 +551,10 @@ function AccountCard({ account, index }: { account: AccountStats; index: number 
         {account.weekend_now && <Chip tone="neutral">Weekend — reduced pace</Chip>}
       </div>
 
+      {account.approval && (
+        <ApprovalRow accountId={account.account_id} approval={account.approval} />
+      )}
+
       {/* Daily headroom, as a bar instead of a fraction -- "3/50" takes a
           beat to parse as "barely used"; a mostly-empty bar reads instantly. */}
       <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 mt-1 border-t border-slate-700">
@@ -558,6 +565,85 @@ function AccountCard({ account, index }: { account: AccountStats; index: number 
         })}
       </div>
     </motion.div>
+  );
+}
+
+// Step-down rule (agreed with Champ, 7 Oct): how many comments a person
+// checks right now, how close the account is to checking fewer, and the
+// "a bad comment got out" button that sends it straight back to 100%.
+function ApprovalRow({ accountId, approval }: { accountId: string; approval: ApprovalLevel }) {
+  const queryClient = useQueryClient();
+  const [reporting, setReporting] = useState(false);
+  const [reason, setReason] = useState('');
+  const report = useMutation({
+    mutationFn: () => outreachApi.resetApproval(accountId, reason.trim()),
+    onSuccess: () => {
+      setReporting(false);
+      setReason('');
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+
+  const progress =
+    approval.next_check_percent === null
+      ? 'lowest level — stays here'
+      : `${approval.clean_streak} of ${approval.clean_needed} clean days toward ${approval.next_check_percent}%`;
+
+  return (
+    <div className="w-full pt-4 mt-1 border-t border-slate-700 text-sm">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="flex items-center gap-1.5 text-slate-500">
+          <ShieldCheck size={14} />
+          Comments checked
+          <span className="text-slate-100 font-semibold">{approval.check_percent}%</span>
+        </span>
+        <span className="text-slate-400">{progress}</span>
+        {approval.last_reset_reason && approval.stage === 1 && approval.clean_streak === 0 && (
+          // Not a Chip: chips never wrap, and a reset reason is a sentence
+          // that got clipped mid-word at phone width.
+          <span className="rounded-lg bg-warn/15 text-warn px-2 py-0.5 text-xs font-medium max-w-full break-words">
+            Back to 100%: {approval.last_reset_reason}
+          </span>
+        )}
+        {approval.check_percent < 100 && !reporting && (
+          <button
+            onClick={() => setReporting(true)}
+            className="ml-auto text-xs text-danger-fg hover:underline min-h-[44px] sm:min-h-0"
+          >
+            Report a bad comment
+          </button>
+        )}
+      </div>
+      {reporting && (
+        <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2">
+          <input
+            autoFocus
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && reason.trim()) report.mutate();
+              if (e.key === 'Escape') setReporting(false);
+            }}
+            placeholder="What was wrong with it?"
+            className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <Button
+            variant="danger"
+            disabled={!reason.trim() || report.isPending}
+            onClick={() => report.mutate()}
+            className="px-2.5 py-1 text-xs shrink-0"
+          >
+            Back to checking 100%
+          </Button>
+          <Button onClick={() => setReporting(false)} className="px-2.5 py-1 text-xs shrink-0">
+            Cancel
+          </Button>
+        </div>
+      )}
+      {report.isError && (
+        <p className="mt-2 text-xs text-danger-fg">Could not reset — try again.</p>
+      )}
+    </div>
   );
 }
 

@@ -52,9 +52,14 @@ async def approve(
     edited_text: Optional[str] = None,
     account: Any = None,
     send_at: Optional[datetime] = None,
+    auto_stage: Optional[int] = None,
 ) -> OutreachSuggestion:
     """
     Approve a suggestion and give it a send time.
+
+    ``auto_stage`` is set when the step-down rule (src/outreach/stepdown.py)
+    approves a comment that wasn't picked for a human check. It is marked on
+    the suggestion so a reset can pull it back into review before it posts.
 
     An edit by the user is re-checked by the quality gate exactly like
     generated copy — a human typing a booking link into a connection note is
@@ -85,6 +90,8 @@ async def approve(
     suggestion.reviewed_at = datetime.now(timezone.utc)
     if reviewer_id:
         suggestion.reviewed_by = uuid.UUID(str(reviewer_id))
+    if auto_stage is not None:
+        suggestion.result = {"auto_approved": True, "approval_stage": auto_stage}
 
     account = account or await _load_account_record(db, suggestion)
     last_sent = await _last_sent_at(db, suggestion.account_id, suggestion.action)
@@ -114,6 +121,7 @@ async def approve(
             "suggestion_id": str(suggestion.id),
             "edited": edited_text is not None,
             "reviewer_id": reviewer_id,
+            "auto_approved": auto_stage is not None,
         },
         commit=False,
     )
@@ -131,9 +139,14 @@ async def reject(
     suppress_target: bool = False,
     reason: Optional[str] = None,
     account: Any = None,
+    comment_problem: bool = False,
 ) -> OutreachSuggestion:
     """
     Reject a suggestion.
+
+    ``comment_problem`` says the comment itself was wrong, off-tone or unsafe
+    (not just a poor fit). Under the step-down rule that sends the account
+    back to checking every comment.
 
     ``suppress_target`` is the "never contact this person" switch: it puts the
     target permanently out of reach of every future suggestion, for every
@@ -177,9 +190,17 @@ async def reject(
             "reason": reason,
             "suppress_target": suppress_target,
             "reviewer_id": reviewer_id,
+            "comment_problem": comment_problem,
         },
         commit=False,
     )
+
+    if account is not None:
+        from src.outreach import stepdown
+
+        await stepdown.on_reject(
+            db, account, suggestion, reason, comment_problem=comment_problem
+        )
 
     await db.commit()
     await db.refresh(suggestion)

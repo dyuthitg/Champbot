@@ -121,6 +121,8 @@ class GenerateResponse(BaseModel):
     considered: int
     skipped: dict = Field(default_factory=dict)
     message: str
+    # Step-down rule outcome for this run: {"checked": n, "auto_approved": n}
+    approval: dict = Field(default_factory=dict)
 
 
 class ApproveRequest(BaseModel):
@@ -139,6 +141,9 @@ class RejectRequest(BaseModel):
     # Required, not optional -- this is the data that improves the prompt
     # later. A reject with no reason teaches the system nothing.
     reason: str = Field(..., min_length=1, max_length=500)
+    # The comment itself was wrong, off-tone or unsafe -- not just a poor fit.
+    # Under the step-down rule this puts the account back to 100% checking.
+    comment_problem: bool = False
 
     @field_validator("reason")
     @classmethod
@@ -202,6 +207,10 @@ class AccountStats(BaseModel):
     health_headline: str = ""
     throttle: float = 1.0
     funnel: dict = Field(default_factory=dict)
+
+    # Step-down rule: what share of comments a person checks, and progress
+    # toward the next step (see src/outreach/stepdown.py).
+    approval: dict = Field(default_factory=dict)
 
     # Run-status: what someone checks at 9am to know the bot is alive.
     caps_today: dict = Field(

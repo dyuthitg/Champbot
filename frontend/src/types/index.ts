@@ -400,6 +400,17 @@ export interface CapToday {
   tracked: boolean;
 }
 
+export interface ApprovalLevel {
+  stage: 1 | 2 | 3;
+  check_percent: number;
+  clean_streak: number;
+  clean_needed: number;
+  next_check_percent: number | null;
+  min_batch_size: number;
+  last_reset_reason: string | null;
+  last_reset_at: string | null;
+}
+
 export interface AccountStats {
   account_id: string;
   display_name?: string;
@@ -420,6 +431,8 @@ export interface AccountStats {
   health_headline: string;
   throttle: number;
   funnel: Partial<Funnel>;
+  /** Step-down rule: share of comments a person checks, and progress to the next step. */
+  approval?: ApprovalLevel;
   /** What someone checks at 9am to know the bot is alive. */
   caps_today: Record<string, CapToday>;
   quiet_hours_now: boolean;
