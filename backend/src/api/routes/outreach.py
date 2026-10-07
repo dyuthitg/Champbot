@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +32,7 @@ from src.database.session import get_db
 from src.outreach import execute as executor
 from src.outreach import health as health_module
 from src.outreach import similarity
+from src.outreach import stepdown
 from src.outreach import suggest as engine
 from src.outreach import sync as sync_module
 from src.outreach.models import OutreachSuggestion, SuggestionAction, SuggestionStatus
@@ -147,6 +149,7 @@ async def generate_suggestions(
         considered=result["considered"],
         skipped=result["skipped"],
         message=result["message"],
+        approval=result.get("approval") or {},
     )
 
 
@@ -334,6 +337,7 @@ async def reject_suggestion(
             reviewer_id=ctx.user_id,
             suppress_target=payload.suppress_target,
             reason=payload.reason,
+            comment_problem=payload.comment_problem,
         )
     except executor.ExecutionBlocked as exc:
         raise HTTPException(status_code=422, detail=exc.reason) from exc
@@ -400,6 +404,29 @@ async def run_due(
     account = await _require_account(db, account_id, ctx.org_id)
     result = await executor.run_due(db, account, rate_limiter=limiter, limit=limit)
     return RunDueResponse(**result)
+
+
+class ApprovalResetRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=300)
+
+
+@router.post("/accounts/{account_id}/approval/reset")
+async def reset_approval(
+    account_id: str,
+    payload: ApprovalResetRequest,
+    ctx: RequestContext = Depends(get_request_context),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Report a bad comment that already posted: back to checking every comment.
+
+    Any comments approved by the step-down rule but not yet posted go back
+    into the review queue.
+    """
+    account = await _require_account(db, account_id, ctx.org_id)
+    result = await stepdown.reset(db, account, f"Bad comment reported: {payload.reason.strip()}")
+    await db.commit()
+    return {**result, "approval": stepdown.summary(account)}
 
 
 @router.post("/accounts/{account_id}/sync")
@@ -565,6 +592,7 @@ async def dashboard(
         )
 
         report = await health_module.account_health(db, account)
+        approval = await stepdown.evaluate(db, account, health_report=report)
 
         remaining = {}
         caps_today = {}
@@ -631,6 +659,7 @@ async def dashboard(
             health_headline=report.headline,
             throttle=report.throttle,
             funnel=report.funnel.as_dict(),
+            approval=approval,
             caps_today=caps_today,
             quiet_hours_now=caps_policy.in_quiet_hours(account),
             weekend_now=caps_policy.is_weekend(account),
@@ -661,6 +690,8 @@ async def dashboard(
             100 * totals["invites_accepted"] / totals["invites_sent"], 1
         )
 
+    # stepdown.evaluate may have counted finished days or applied a reset.
+    await db.commit()
     return DashboardResponse(accounts=stats, totals=totals)
 
 

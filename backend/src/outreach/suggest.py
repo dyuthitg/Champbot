@@ -94,6 +94,14 @@ async def generate_suggestions(
     # action nobody was trying to use. Comment is a suggestable action too
     # (see `permitted` below); it belongs in this gate.
     report = await health_module.account_health(db, account)
+
+    # Step-down rule: count finished days and apply health resets before any
+    # new comment is sampled against the account's check rate.
+    from src.outreach import stepdown
+
+    await stepdown.evaluate(db, account, health_report=report)
+    await db.commit()
+
     action_gate = {
         action: warmup_service.can_perform(account, action, report)
         for action in (SuggestionAction.CONNECT, SuggestionAction.MESSAGE, SuggestionAction.COMMENT)
@@ -212,11 +220,18 @@ async def generate_suggestions(
     for suggestion in created:
         await db.refresh(suggestion)
 
+    # Comments not picked for a human check under the step-down rule are
+    # approved here; everything else stays in the review queue.
+    approval = await stepdown.apply_to_new(db, account, created)
+    for suggestion in created:
+        await db.refresh(suggestion)
+
     return {
         "created": created,
         "considered": len(targets),
         "skipped": skipped,
         "message": _summarize(len(created), len(targets), skipped),
+        "approval": approval,
     }
 
 
