@@ -31,6 +31,7 @@ from src.api.middleware.clerk import RequestContext, get_request_context
 from src.database.session import get_db
 from src.outreach import execute as executor
 from src.outreach import health as health_module
+from src.outreach import review_metrics
 from src.outreach import similarity
 from src.outreach import stepdown
 from src.outreach import suggest as engine
@@ -46,6 +47,7 @@ from src.outreach.schemas import (
     GenerateRequest,
     GenerateResponse,
     RejectRequest,
+    ReviewMetricsResponse,
     QualityFlagOut,
     RunDueResponse,
     SuggestionListResponse,
@@ -693,6 +695,18 @@ async def dashboard(
     # stepdown.evaluate may have counted finished days or applied a reset.
     await db.commit()
     return DashboardResponse(accounts=stats, totals=totals)
+
+
+@router.get("/review-metrics", response_model=ReviewMetricsResponse)
+async def review_metrics_view(
+    days: int = Query(7, ge=1, le=90),
+    account_id: Optional[str] = Query(None),
+    ctx: RequestContext = Depends(get_request_context),
+    db: AsyncSession = Depends(get_db),
+) -> ReviewMetricsResponse:
+    """Items reviewed, approval rate, edits per item and time to approve."""
+    data = await review_metrics.compute(db, ctx.org_id, days=days, account_id=account_id)
+    return ReviewMetricsResponse(**data)
 
 
 # ----------------------------------------------------------------------

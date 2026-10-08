@@ -22,6 +22,7 @@ import type {
   Suggestion,
   SuggestionPage,
   PreflightReport,
+  ReviewMetrics,
   Target,
   TargetImportItem,
   WarmupProgram,
@@ -344,6 +345,14 @@ export const outreachApi = {
   async dashboard(): Promise<Dashboard> {
     const { data } = await http.get('/outreach/dashboard');
     return data as Dashboard;
+  },
+
+  /** Items reviewed, approval rate, edits per item, time to approve. */
+  async reviewMetrics(days: number, accountId?: string): Promise<ReviewMetrics> {
+    const { data } = await http.get('/outreach/review-metrics', {
+      params: { days, account_id: accountId || undefined },
+    });
+    return data as ReviewMetrics;
   },
 
   /** Step-down rule: a bad comment already posted, so check every comment again. */

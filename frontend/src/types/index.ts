@@ -452,6 +452,36 @@ export interface Dashboard {
   totals: Record<string, number>;
 }
 
+// ---------------------------------------------------------------------------
+// Review-queue metrics (GET /outreach/review-metrics)
+// ---------------------------------------------------------------------------
+
+/** Decisions in one slice of the window. Rates are null when there was
+ *  nothing to divide by -- "no data", which must not render as 0%. */
+export interface ReviewMetricsBucket {
+  reviewed: number;
+  approved: number;
+  rejected: number;
+  edited: number;
+  approval_rate: number | null;
+  edits_per_item: number | null;
+  median_seconds_to_approve: number | null;
+  p90_seconds_to_approve: number | null;
+}
+
+export interface ReviewMetrics {
+  days: number;
+  since: string;
+  until: string;
+  totals: ReviewMetricsBucket;
+  /** Approved by the step-down rule -- kept out of every rate above. */
+  auto_approved: number;
+  pending_now: number;
+  oldest_pending_seconds: number | null;
+  by_action: (ReviewMetricsBucket & { action: string })[];
+  daily: (ReviewMetricsBucket & { date: string })[];
+}
+
 export interface ScorePreview {
   score: number;
   reasons: string[];

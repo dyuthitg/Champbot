@@ -234,3 +234,38 @@ class DashboardResponse(BaseModel):
 
     accounts: List[AccountStats]
     totals: dict = Field(default_factory=dict)
+
+
+class ReviewMetricsBucket(BaseModel):
+    """Decisions in one slice of the window -- all of it, one action, or one day."""
+
+    reviewed: int
+    approved: int
+    rejected: int
+    edited: int
+    approval_rate: Optional[float] = Field(None, description="Percent; null when nothing was reviewed")
+    edits_per_item: Optional[float] = Field(None, description="Edited approvals / approvals")
+    median_seconds_to_approve: Optional[int] = None
+    p90_seconds_to_approve: Optional[int] = None
+
+
+class ReviewMetricsAction(ReviewMetricsBucket):
+    action: str
+
+
+class ReviewMetricsDay(ReviewMetricsBucket):
+    date: str
+
+
+class ReviewMetricsResponse(BaseModel):
+    """How the human review step is going. See src/outreach/review_metrics.py."""
+
+    days: int
+    since: datetime
+    until: datetime
+    totals: ReviewMetricsBucket
+    auto_approved: int = Field(description="Approved by the step-down rule; kept out of every rate")
+    pending_now: int
+    oldest_pending_seconds: Optional[int] = None
+    by_action: List[ReviewMetricsAction]
+    daily: List[ReviewMetricsDay]
