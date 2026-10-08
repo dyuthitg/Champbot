@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
 import { Account } from './pages/Account';
 import { AccountsAndAgents } from './pages/AccountsAndAgents';
-import { Approvals } from './pages/Approvals';
+import { ApprovalsAndMetrics } from './pages/ApprovalsAndMetrics';
 import { CampaignDetail } from './pages/CampaignDetail';
 import { CreateCampaign } from './pages/CreateCampaign';
 import { Dashboard } from './pages/Dashboard';
@@ -50,7 +50,8 @@ function AnimatedRoutes() {
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Page><Dashboard /></Page>} />
-        <Route path="/approvals" element={<Page><Approvals /></Page>} />
+        <Route path="/approvals" element={<Page><ApprovalsAndMetrics /></Page>} />
+        <Route path="/approvals/metrics" element={<Page><ApprovalsAndMetrics /></Page>} />
         <Route path="/accounts" element={<Page><AccountsAndAgents /></Page>} />
         <Route path="/warmup" element={<Page><AccountsAndAgents /></Page>} />
         <Route path="/agents" element={<Page><AccountsAndAgents /></Page>} />
